@@ -29,6 +29,9 @@ challengers-server/
 
 ## ⚙️ 실행 방법
 
+## Visual Studio Code 에서 new Terminal를 열고, 아래의 사항을 입력하면 됩니다.
+### 단, 깃이 컴퓨터에 깔려있어야 아래의 작업을 하실 수 있습니다.
+
 ### 1. 프로젝트 클론 => VisualStudioCode에서
 
 ```bash 
