@@ -38,9 +38,26 @@ psql -U postgres
 -- DB 생성
 CREATE DATABASE katet;
 
--- 테이블 생성
-\c katet
+🛠 PostgreSQL 데이터베이스 준비
+PostgreSQL 접속
 
+bash
+코드 복사
+psql -U postgres
+데이터베이스 생성
+
+sql
+코드 복사
+CREATE DATABASE katet;
+데이터베이스 접속
+
+sql
+코드 복사
+\c katet
+users 테이블 생성
+
+sql
+코드 복사
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -56,7 +73,7 @@ CREATE TABLE users (
   equipment TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-🔑 PostgreSQL 로그인 시 기본 사용자 계정은 postgres이며, 비밀번호는 설치 시 설정한 값입니다.
+🔑 기본 PostgreSQL 계정은 postgres이며, 비밀번호는 설치 시 설정한 값입니다.
 
 4. 환경변수 설정 (.env)
 .env 파일을 루트 디렉토리에 만들어 다음 내용을 입력하세요:
