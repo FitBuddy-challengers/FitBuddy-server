@@ -8,7 +8,6 @@ require('dotenv').config();
 const app = express();
 const port = 3000;
 
-// 미들웨어 설정
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -21,7 +20,7 @@ const pool = new Pool({
     port: 5432,
 });
 
-// Nodemailer 설정 (이메일 발송)
+// Nodemailer 설정
 const transporter = nodemailer.createTransport({
     service: 'Gmail',
     auth: {
@@ -30,25 +29,21 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// 메모리 안에 임시 저장
-const otpStore = {};       // 이메일 → OTP
-const pendingUsers = {};   // 이메일 → { email, password }
+// 메모리 임시 저장소
+const otpStore = {};
+const pendingUsers = {};
 
-// ✅ 회원가입 API (DB 저장하지 않고 메모리에 임시 저장)
+// ✅ 회원가입 정보 임시 저장
 app.post('/signup', (req, res) => {
     const { email, password } = req.body;
-
     pendingUsers[email] = { email, password };
     console.log('회원가입 요청 저장됨:', pendingUsers);
-
     res.status(200).send({ message: '회원가입 정보 임시 저장 완료' });
 });
 
-// ✅ OTP 전송 API (이메일로 인증번호 보내기)
+// ✅ OTP 전송
 app.post('/send-otp', async (req, res) => {
     const { email } = req.body;
-
-    // 6자리 랜덤 OTP 생성
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     try {
@@ -59,9 +54,8 @@ app.post('/send-otp', async (req, res) => {
             text: `인증번호는 ${otp} 입니다.`,
         });
 
-        otpStore[email] = otp; // 메모리에 저장
+        otpStore[email] = otp;
         console.log(`[OTP 전송] ${email} → OTP: ${otp}`);
-
         res.status(200).send({ message: 'OTP 전송 완료' });
     } catch (error) {
         console.error(error);
@@ -69,56 +63,52 @@ app.post('/send-otp', async (req, res) => {
     }
 });
 
-// ✅ OTP 검증 API (성공 시 DB에 저장)
+// ✅ OTP 검증 및 DB 저장
 app.post('/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
 
-    // 🛠️ 디버깅용 서버 로그 추가
     console.log(`[OTP 검증 요청] email: ${email}, 사용자 입력 OTP: ${otp}`);
     console.log(`[서버 저장된 OTP] ${otpStore[email]}`);
 
-    if (otpStore[email] && otpStore[email] === otp) {
-        // 인증 성공
-        delete otpStore[email]; // OTP 삭제
+    const userData = pendingUsers[email];
+    if (!userData) {
+        return res.status(400).send({ message: '회원가입 정보가 존재하지 않습니다.' });
+    }
 
-        const userData = pendingUsers[email];
-        if (userData) {
-            try {
-                await pool.query(
-                    'INSERT INTO users (email, password) VALUES ($1, $2)',
-                    [userData.email, userData.password]
-                );
-                delete pendingUsers[email]; // 메모리에서도 삭제
-
-                console.log(`[회원가입 성공] email: ${email}`);
-                res.status(200).send({ message: '회원가입 완료' });
-            } catch (error) {
-                console.error(error);
-                res.status(500).send({ message: '회원가입 실패: DB 저장 에러' });
-            }
-        } else {
-            res.status(400).send({ message: '회원가입 정보 없음' });
+    try {
+        const alreadyExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (alreadyExists.rows.length > 0) {
+            console.log(`[중복 인증 시도] 이미 가입된 사용자: ${email}`);
+            return res.status(200).send({ message: '이미 인증이 완료된 사용자입니다.' });
         }
-    } else {
-        // 인증 실패
-        console.log(`[인증 실패] email: ${email}, 입력 OTP: ${otp}, 저장된 OTP: ${otpStore[email]}`);
-        res.status(400).send({ message: '인증 실패: 인증번호가 틀렸습니다.' });
+
+        if (otpStore[email] && otpStore[email] === otp) {
+            delete otpStore[email];
+
+            await pool.query(
+                'INSERT INTO users (email, password) VALUES ($1, $2)',
+                [userData.email, userData.password]
+            );
+            delete pendingUsers[email];
+
+            console.log(`[회원가입 성공] email: ${email}`);
+            return res.status(200).send({ message: '회원가입 완료' });
+        } else {
+            console.log(`[인증 실패] email: ${email}, 입력 OTP: ${otp}, 저장된 OTP: ${otpStore[email]}`);
+            return res.status(400).send({ message: '인증 실패: 인증번호가 만료되었거나 틀렸습니다.' });
+        }
+    } catch (error) {
+        console.error('[DB 오류]', error);
+        return res.status(500).send({ message: '회원가입 실패: DB 처리 중 오류' });
     }
 });
 
-// ✅ 🔥 프로필 정보 업데이트 API 추가
+// ✅ 프로필 정보 업데이트
 app.post('/update-profile', async (req, res) => {
     const {
-        email,
-        name,
-        age_group,
-        gender,
-        height,
-        weight,
-        diseases,
-        workout_level,
-        preferred_workouts,
-        equipment
+        email, name, age_group, gender,
+        height, weight, diseases,
+        workout_level, preferred_workouts, equipment
     } = req.body;
 
     console.log(`[프로필 저장 요청] email: ${email}`);
@@ -126,7 +116,7 @@ app.post('/update-profile', async (req, res) => {
     try {
         const result = await pool.query(`
             UPDATE users SET 
-                 name = $1,
+                name = $1,
                 age_group = $2,
                 gender = $3,
                 height = $4,
@@ -161,7 +151,30 @@ app.post('/update-profile', async (req, res) => {
     }
 });
 
+// ✅ [로그인 기능 추가]
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM users WHERE email = $1 AND password = $2',
+            [email, password]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(401).send({ message: '이메일 또는 비밀번호가 일치하지 않습니다.' });
+        }
+
+        console.log(`[로그인 성공] ${email}`);
+        res.status(200).send({ message: '로그인 성공', user: result.rows[0] });
+    } catch (error) {
+        console.error('[로그인 오류]', error);
+        res.status(500).send({ message: '로그인 중 서버 오류' });
+    }
+});
+
+
 // ✅ 서버 시작
-app.listen(3000, "0.0.0.0", () => {
-    console.log(`🚀 서버가 http://0.0.0.0:3000 에서 실행 중입니다.`);
+app.listen(port, "0.0.0.0", () => {
+    console.log(`🚀 서버가 http://0.0.0.0:${port} 에서 실행 중입니다.`);
 });
