@@ -351,7 +351,7 @@ if (isNaN(exId)) {
         for (let i = 1; i <= 3; i++) {
           console.log(`⏳ TIME 세트 삽입 #${i}`);
           await client.query(
-            `INSERT INTO exercise_time_sets (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed)
+            `INSERT INTO exercise_time (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed)
             VALUES ($1, $2, $3, $4, false)`,
             [scheduleId, exId, i, 600000]
           );
@@ -405,7 +405,7 @@ app.post("/api/schedule/:scheduleId/exercise", async (req, res) => {
       // ✅ time 기반: 10분(600초) × 3세트
       for (let i = 1; i <= 3; i++) {
         await pool.query(
-          `INSERT INTO exercise_time_sets 
+          `INSERT INTO exercise_time
            (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed) 
            VALUES ($1, $2, $3, $4, false)`,
           [scheduleId, exercise_id, i, 600]
@@ -537,7 +537,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
 
     // 1️⃣ 기존 세트 삭제
     await client.query("DELETE FROM exercise_reps WHERE schedule_id = $1", [scheduleId]);
-    await client.query("DELETE FROM exercise_time_sets WHERE schedule_id = $1", [scheduleId]);
+    await client.query("DELETE FROM exercise_time WHERE schedule_id = $1", [scheduleId]);
 
     // 2️⃣ exercise_id 업데이트
     await client.query(
@@ -561,7 +561,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
     if (isTime) {
       for (let i = 1; i <= 3; i++) {
         await client.query(
-          `INSERT INTO exercise_time_sets 
+          `INSERT INTO exercise_time
             (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed) 
            VALUES ($1, $2, $3, $4, false)`,
           [scheduleId, newExerciseId, i, 600000]
@@ -635,7 +635,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
 
         FROM exercise_schedule s
         LEFT JOIN exercise_reps r ON s.id = r.schedule_id AND r.set_number = 1
-        LEFT JOIN exercise_time_sets t ON s.id = t.schedule_id
+        LEFT JOIN exercise_time t ON s.id = t.schedule_id
         LEFT JOIN exercise e ON e.id = COALESCE(s.exercise_id, r.exercise_id, t.exercise_id)
         WHERE s.exercise_plan_id = $1
         AND COALESCE(s.exercise_id, r.exercise_id, t.exercise_id) IS NOT NULL
@@ -654,7 +654,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
       );
       // time 기반 세트 정보
       const timeCountRes = await pool.query(
-        `SELECT COUNT(*) AS count, MAX(elapsed_time_millis) AS max_seconds FROM exercise_time_sets WHERE schedule_id = $1`,
+        `SELECT COUNT(*) AS count, MAX(elapsed_time_millis) AS max_seconds FROM exercise_time WHERE schedule_id = $1`,
         [scheduleId]
       );
 
@@ -725,7 +725,7 @@ app.delete('/api/schedule/:scheduleId', async (req, res) => {
 
     // 🔹 연결된 세트 먼저 삭제
     await client.query("DELETE FROM exercise_reps WHERE schedule_id = $1", [scheduleId]);
-    await client.query("DELETE FROM exercise_time_sets WHERE schedule_id = $1", [scheduleId]);
+    await client.query("DELETE FROM exercise_time WHERE schedule_id = $1", [scheduleId]);
 
     // ✅ 스케줄 자체 삭제
     await client.query("DELETE FROM exercise_schedule WHERE id = $1", [scheduleId]);
@@ -748,7 +748,7 @@ app.delete('/api/schedule/:scheduleId', async (req, res) => {
         const result = await pool.query(`
             SELECT es.id FROM exercise_schedule es
             LEFT JOIN exercise_reps er ON es.id = er.schedule_id
-            LEFT JOIN exercise_time_sets et ON es.id = et.schedule_id
+            LEFT JOIN exercise_time et ON es.id = et.schedule_id
             WHERE es.exercise_plan_id = $1 AND 
                   (er.exercise_id = $2 OR et.exercise_id = $2)
             LIMIT 1
@@ -853,7 +853,7 @@ app.get('/api/schedule/:scheduleId/time-sets', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT set_number, elapsed_time_millis, weight
-       FROM exercise_time_sets
+       FROM exercise_time
        WHERE schedule_id = $1
        ORDER BY set_number ASC`,
       [scheduleId]
@@ -903,7 +903,7 @@ app.patch("/api/schedule/:scheduleId/time-sets", async (req, res) => {
     }
 
     // 2. 기존 세트 삭제
-    await client.query("DELETE FROM exercise_time_sets WHERE schedule_id = $1", [scheduleId]);
+    await client.query("DELETE FROM exercise_time WHERE schedule_id = $1", [scheduleId]);
     console.log(`[PATCH /time-sets] Deleted old sets for scheduleId: ${scheduleId}`);
 
     // 3. 새 세트 삽입 시 exercise_id 포함
@@ -913,7 +913,7 @@ app.patch("/api/schedule/:scheduleId/time-sets", async (req, res) => {
             console.log(`[PATCH /time-sets] Inserting new set for scheduleId: ${scheduleId}, exerciseId: ${exerciseId}, set:`, set);
             // ⭐️ exercise_id를 INSERT 문에 추가
             await client.query(`
-              INSERT INTO exercise_time_sets (schedule_id, exercise_id, set_number, elapsed_time_millis, weight, is_completed)
+              INSERT INTO exercise_time (schedule_id, exercise_id, set_number, elapsed_time_millis, weight, is_completed)
               VALUES ($1, $2, $3, $4, $5, false)
             `, [scheduleId, exerciseId, set.set_number, millis, set.weight]); // exerciseId 파라미터 추가
         }
