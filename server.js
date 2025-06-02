@@ -342,6 +342,7 @@ if (isNaN(exId)) {
 
     const typeRes = await client.query(`SELECT is_time_type FROM exercise WHERE id = $1`, [exId]);
     const isTimeType = typeRes.rows[0]?.is_time_type;
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
 
     // ✅ 세트 삽입 로직에 try-catch 추가
     console.log("⏱ 운동 타입:", isTimeType ? "TIME 기반" : "REPS 기반");
@@ -353,7 +354,7 @@ if (isNaN(exId)) {
           await client.query(
             `INSERT INTO exercise_time (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed)
             VALUES ($1, $2, $3, $4, false)`,
-            [scheduleId, exId, i, 600000]
+            [scheduleId, exId, i, TEN_MINUTES_MS]
           );
         }
       } else {
@@ -388,6 +389,7 @@ app.post("/api/schedule/:scheduleId/exercise", async (req, res) => {
   try {
     const scheduleId = parseInt(req.params.scheduleId);
     const { exercise_id } = req.body;
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
 
     const exercise = await pool.query(
       "SELECT is_time_type FROM exercise WHERE id = $1",
@@ -408,7 +410,7 @@ app.post("/api/schedule/:scheduleId/exercise", async (req, res) => {
           `INSERT INTO exercise_time 
            (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed) 
            VALUES ($1, $2, $3, $4, false)`,
-          [scheduleId, exercise_id, i, 600]
+          [scheduleId, exercise_id, i, TEN_MINUTES_MS]
         );
       }
     } else {
@@ -520,6 +522,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
   console.log("🔥 운동 변경 요청 body:", req.body);
   const scheduleId = parseInt(req.params.scheduleId, 10);
   const { newExerciseId } = req.body;
+  const TEN_MINUTES_MS = 10 * 60 * 1000; // 600,000ms = 10분
 
   // null 또는 undefined 방어 로직 추가
   if (!newExerciseId || isNaN(newExerciseId)) {
@@ -564,7 +567,7 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
           `INSERT INTO exercise_time 
             (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed) 
            VALUES ($1, $2, $3, $4, false)`,
-          [scheduleId, newExerciseId, i, 600000]
+          [scheduleId, newExerciseId, i, TEN_MINUTES_MS]
         );
       }
     } else {
@@ -836,27 +839,30 @@ app.get('/api/schedule/:scheduleId/time-sets', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT set_number, elapsed_time_millis, weight
-       FROM exercise_time
-       WHERE schedule_id = $1
+      `SELECT set_number, elapsed_time_millis, is_completed,
+              COALESCE(weight, 0) AS weight  -- 🔥 weight 기본값 보장
+       FROM exercise_time 
+       WHERE schedule_id = $1 
        ORDER BY set_number ASC`,
       [scheduleId]
     );
 
-    // 클라이언트에 초 단위로 내려줌
+    // 초 단위로 변환해서 내려줌
     const sets = result.rows.map(row => ({
       set_number: row.set_number,
       seconds: Math.floor(row.elapsed_time_millis / 1000),
-      weight: row.weight
+      weight: row.weight,
+      is_completed: row.is_completed
     }));
 
     console.log(`✅ [GET] TIME 세트 불러오기 - scheduleId: ${scheduleId}`);
-    res.json(sets); // [{ set_number: 1, seconds: 600, weight: 0.0 }, ...]
+    res.json(sets);
   } catch (err) {
     console.error("❌ TIME 세트 불러오기 실패:", err);
     res.status(500).json({ message: "서버 오류" });
   }
 });
+
 
 app.patch("/api/schedule/:scheduleId/time-sets", async (req, res) => {
   const scheduleId = parseInt(req.params.scheduleId);
