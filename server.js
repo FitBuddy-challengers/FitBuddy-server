@@ -8,10 +8,12 @@ require('dotenv').config();
 
 const app = express();
 const port = 3000;
+const router = express.Router();
 
 console.log("✅ server.js 실제 실행됨 - 최상단 로그 확인"); 
 
 app.use(cors());
+app.use('/api', router);
 
 app.use(bodyParser.json());
 
@@ -22,6 +24,98 @@ const pool = new Pool({
     database: process.env.DB_DATABASE,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
+});
+
+// 사용자 챌린지 정보 조회 APIAdd commentMore actions
+router.get('/user-challenge-progress/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+
+  if (isNaN(userId)) {
+    return res.status(400).json({ message: 'Invalid userId' });
+  }
+
+  try {
+    // 1. users 테이블에서 닉네임, 레벨, 코인, 이미지 조회
+    const userResult = await pool.query(
+      `SELECT name, level, coin, COALESCE(profile_image, '') AS profile_image
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // 2. challenge_level 테이블에서 현재 레벨의 조건 + 보상 조회
+    const levelResult = await pool.query(
+      `SELECT 
+         required_attendance, required_photo, required_exercise,
+         reward_attendance, reward_photo, reward_exercise
+       FROM challenge_level
+       WHERE level = $1`,
+      [user.level]
+    );
+
+    const levelInfo = levelResult.rows.length > 0
+      ? levelResult.rows[0]
+      : {
+          required_attendance: 0, required_photo: 0, required_exercise: 0,
+          reward_attendance: 0, reward_photo: 0, reward_exercise: 0
+        };
+
+    // 3. user_challenge_progress 테이블에서 현재 진행도 조회
+    const progressResult = await pool.query(
+      `SELECT attendance_count, photo_count, exercise_count
+       FROM user_challenge_progress
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    const current = progressResult.rows.length > 0
+      ? progressResult.rows[0]
+      : { attendance_count: 0, photo_count: 0, exercise_count: 0 };
+
+    // 4. 퍼센트 계산 함수
+    const calcPercent = (curr, req) => (req === 0 ? 100 : Math.min(100, Math.floor((curr / req) * 100)));
+
+    // 5. 응답 데이터 구성
+    const response = {
+      nickname: user.name,
+      level: user.level,
+      coin: user.coin,
+      profileImage: user.profile_image,
+      required: {
+        attendance: levelInfo.required_attendance,
+        photo: levelInfo.required_photo,
+        exercise: levelInfo.required_exercise
+      },
+      current: {
+        attendance: current.attendance_count,
+        photo: current.photo_count,
+        exercise: current.exercise_count
+      },
+      progress: {
+        attendancePercent: calcPercent(current.attendance_count, levelInfo.required_attendance),
+        photoPercent: calcPercent(current.photo_count, levelInfo.required_photo),
+        exercisePercent: calcPercent(current.exercise_count, levelInfo.required_exercise)
+      },
+      reward: { // ✅ 추가된 reward 필드
+        attendance: levelInfo.reward_attendance,
+        photo: levelInfo.reward_photo,
+        exercise: levelInfo.reward_exercise
+      }
+    };
+
+    console.log(`✅ 사용자 챌린지 정보 반환:`, response);
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ 사용자 챌린지 조회 실패:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 // Nodemailer 설정
@@ -439,7 +533,7 @@ app.get("/api/schedule/:scheduleId/exercise-info", async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT e.id, e.name, e.is_time_type
+      SELECT e.id, e.name, e.is_time_type, e.is_favorite, e.is_hidden
       FROM exercise_schedule s
       JOIN exercise e ON s.exercise_id = e.id
       WHERE s.id = $1
@@ -512,6 +606,40 @@ app.patch('/api/schedule/:id/order', async (req, res) => {
       res.status(500).json({ message: "서버 오류" });
     }
   });
+
+  // ✅ 특정 운동 계획(planId)에 속한 스케줄 목록 반환 API
+app.get("/api/plans/:planId/schedules", async (req, res) => {
+  const planId = parseInt(req.params.planId, 10);
+
+  if (isNaN(planId)) {
+      return res.status(400).json({ message: "유효하지 않은 planId입니다." });
+  }
+
+  try {
+      const result = await pool.query(
+          `SELECT 
+              id AS schedule_id, 
+              exercise_id, 
+              exercise_order
+           FROM exercise_schedule 
+           WHERE exercise_plan_id = $1 
+           ORDER BY exercise_order ASC`,
+          [planId]
+      );
+
+      if (result.rows.length === 0) {
+          console.log(`[스케줄 조회] planId: ${planId}에 해당하는 스케줄 없음`);
+          return res.status(200).json([]); 
+      }
+
+      console.log(`[스케줄 조회] planId: ${planId}의 스케줄 ${result.rows.length}개 반환`);
+      res.status(200).json(result.rows); 
+
+  } catch (error) {
+      console.error(`❌ planId ${planId}의 스케줄 조회 실패:`, error);
+      res.status(500).json({ message: "서버 오류: 스케줄 조회에 실패했습니다." });
+  }
+});
 
 
   // 운동 변경하기 서버 라우터
@@ -631,8 +759,9 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
           e.caution,
           e.mets,
           e.is_time_type,
-          e.is_noise
-
+          e.is_noise,
+          e.is_favorite, -- ★ 추가
+          e.is_hidden    -- ★ 추가
         FROM exercise_schedule s
         LEFT JOIN exercise_reps r ON s.id = r.schedule_id AND r.set_number = 1
         LEFT JOIN exercise_time t ON s.id = t.schedule_id
@@ -670,8 +799,9 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
 
       if (sched.is_time_type) {
         // 수정: 프론트엔드는 서버가 전달한 이 display_detail 값을 그대로 화면에 표시하기 때문에 "10000분"으로 보이게 됩니다.
-        // const minutes = Math.round((timeVal || 0) / 60); (x)
-        // const minutes = Math.round((timeVal || 0) / 60000);
+        // const minutes = Math.round((timeVal || 0) / 60); (기존)
+        // const minutes = Math.round((timeVal || 0) / 60000); (분 단위로 나오게)
+        // 00:00:00 단위로 나오게 (아래)
         const timeInMillis = timeVal || 0;
         let totalSeconds = Math.floor(timeInMillis / 1000);
   
@@ -775,7 +905,7 @@ app.get('/api/reps-sets/:scheduleId', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT set_number, reps, weight
+      `SELECT set_number, reps, weight, is_completed
        FROM exercise_reps
        WHERE schedule_id = $1
        ORDER BY set_number ASC`,
@@ -842,7 +972,7 @@ app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
   }
 });
 
-// 🔄 elapsed_time_millis → seconds 로 환산하여 내려줌
+// 🔄 elapsed_time_millis → seconds 로 환산하여 내려줌 -) 시간 세트 수정만 손 보고 나머지는 건들지 않았습니다! 
 app.get('/api/schedule/:scheduleId/time-sets', async (req, res) => {
   const scheduleId = parseInt(req.params.scheduleId, 10);
 
@@ -852,14 +982,15 @@ app.get('/api/schedule/:scheduleId/time-sets', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT set_number, elapsed_time_millis, weight
-       FROM exercise_time
-       WHERE schedule_id = $1
+      `SELECT set_number, elapsed_time_millis, is_completed,
+              COALESCE(weight, 0) AS weight  -- 🔥 weight 기본값 보장
+       FROM exercise_time 
+       WHERE schedule_id = $1 
        ORDER BY set_number ASC`,
       [scheduleId]
     );
 
-    // 클라이언트에 초 단위로 내려줌
+    // 초 단위로 변환해서 내려줌
     const sets = result.rows.map(row => ({
       set_number: row.set_number,
       seconds: Math.floor(row.elapsed_time_millis / 1000),
@@ -867,7 +998,7 @@ app.get('/api/schedule/:scheduleId/time-sets', async (req, res) => {
     }));
 
     console.log(`✅ [GET] TIME 세트 불러오기 - scheduleId: ${scheduleId}`);
-    res.json(sets); // [{ set_number: 1, seconds: 600, weight: 0.0 }, ...]
+    res.json(sets); 
   } catch (err) {
     console.error("❌ TIME 세트 불러오기 실패:", err);
     res.status(500).json({ message: "서버 오류" });
@@ -1021,8 +1152,345 @@ app.patch('/api/schedule/:scheduleId/complete', async (req, res) => {
   }
 });
 
-  
+ // 운동 즐겨찾기 상태 토글 API
+app.patch("/api/exercises/:exerciseId/favorite", async (req, res) => {
+  const exerciseIdFromParam = parseInt(req.params.exerciseId, 10); // 명확한 변수명 사용
+  const { isFavorite: requestedIsFavorite } = req.body; // 클라이언트가 요청한 새로운 상태
 
+  if (requestedIsFavorite === undefined || typeof requestedIsFavorite !== 'boolean' || isNaN(exerciseIdFromParam)) {
+      return res.status(400).json({ message: "필수 정보(exerciseId, isFavorite)가 누락되었거나 형식이 잘못되었습니다." });
+  }
+
+  try {
+      const result = await pool.query(
+          "UPDATE exercise SET is_favorite = $1 WHERE id = $2 RETURNING id, name, is_favorite",
+          [requestedIsFavorite, exerciseIdFromParam] // 클라이언트가 요청한 isFavorite 값으로 DB 업데이트
+      );
+
+      if (result.rowCount === 0) {
+          return res.status(404).json({ message: "해당 ID의 운동을 찾을 수 없습니다." });
+      }
+
+      const updatedExercise = result.rows[0]; // DB에서 실제 업데이트된 값을 가져옴
+
+      // 서버 내부 로깅 (DB에 실제 반영된 값 기준)
+      console.log(`[즐겨찾기 DB 업데이트 완료] exerciseId: ${updatedExercise.id}, 실제 DB is_favorite: ${updatedExercise.is_favorite}`);
+
+      // 클라이언트에 반환하는 JSON 객체
+      res.status(200).json({
+          message: "즐겨찾기 상태가 변경되었습니다.",
+          exerciseId: updatedExercise.id, // ★★★ DB에서 반환된 id 사용
+          isFavorite: updatedExercise.is_favorite // ★★★ DB에서 반환된 is_favorite 사용
+      });
+
+  } catch (error) {
+      console.error("즐겨찾기 상태 변경 실패:", error);
+      res.status(500).json({ message: "서버 오류 발생" });
+  }
+});
+
+// 운동 숨김상태 
+app.patch("/api/exercises/:exerciseId/hidden", async (req, res) => {
+  const exerciseId = parseInt(req.params.exerciseId, 10);
+  const { isHidden } = req.body; // 클라이언트에서 새로운 숨김 상태 (true/false)를 보냄
+
+  if (isHidden === undefined || typeof isHidden !== 'boolean' || isNaN(exerciseId)) {
+      return res.status(400).json({ message: "필수 정보(exerciseId, isHidden)가 누락되었거나 형식이 잘못되었습니다." });
+  }
+
+  try {
+      const result = await pool.query(
+          // is_favorite도 함께 반환하여 클라이언트가 최신 상태를 모두 가질 수 있도록 함
+          "UPDATE exercise SET is_hidden = $1 WHERE id = $2 RETURNING id, name, is_hidden, is_favorite",
+          [isHidden, exerciseId]
+      );
+
+      if (result.rowCount === 0) {
+          return res.status(404).json({ message: "해당 ID의 운동을 찾을 수 없습니다." });
+      }
+
+      const updatedExercise = result.rows[0];
+      console.log(`[숨김 상태 변경] exerciseId: ${updatedExercise.id}, 실제 DB is_hidden: ${updatedExercise.is_hidden}`);
+
+      res.status(200).json({
+          message: "운동 숨김 상태가 변경되었습니다.",
+          exerciseId: updatedExercise.id,
+          isHidden: updatedExercise.is_hidden,
+          isFavorite: updatedExercise.is_favorite // 즐겨찾기 상태도 함께 반환
+      });
+
+  } catch (error) {
+      console.error("운동 숨김 상태 변경 실패:", error);
+      res.status(500).json({ message: "서버 오류 발생" });
+  }
+});
+
+// GET /api/challenge-levels(개인 챌린지 부분.)
+app.get('/api/challenge-levels', async (req, res) => {
+  try {
+      const result = await pool.query('SELECT * FROM challenge_level ORDER BY level ASC');
+      res.json(result.rows);
+  } catch (err) {
+      console.error('❌ challenge level fetch error', err);
+      res.status(500).json({ error: 'DB error' });
+  }
+});
+
+app.get('/api/user-challenge-progress/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  if (isNaN(userId)) {
+      return res.status(400).json({ message: "Invalid userId" });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT 
+          u.level,
+          u.coin,
+          u.name AS nickname,
+          COALESCE(u.profile_image, '') AS profile_image,
+          COALESCE(cl.required_attendance, 0) AS required_attendance,
+          COALESCE(cl.required_photo, 0) AS required_photo,
+          COALESCE(cl.required_exercise, 0) AS required_exercise,
+          COALESCE(cl.reward_attendance, 0) AS reward_attendance,
+          COALESCE(cl.reward_photo, 0) AS reward_photo,
+          COALESCE(cl.reward_exercise, 0) AS reward_exercise,
+          COALESCE(p.attendance_count, 0) AS attendance_count,
+          COALESCE(p.photo_count, 0) AS photo_count,
+          COALESCE(p.exercise_count, 0) AS exercise_count
+      FROM users u
+      LEFT JOIN challenge_level cl ON u.level = cl.level
+      LEFT JOIN user_challenge_progress p ON u.id = p.user_id
+      WHERE u.id = $1
+    `, [userId]);
+
+      if (result.rows.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+      }
+
+      const row = result.rows[0];
+
+      const progress = {
+          attendancePercent: Math.min(100, Math.floor((row.attendance_count / row.required_attendance) * 100)),
+          photoPercent: Math.min(100, Math.floor((row.photo_count / row.required_photo) * 100)),
+          exercisePercent: Math.min(100, Math.floor((row.exercise_count / row.required_exercise) * 100))
+      };
+
+      res.json({
+          level: row.level,
+          coin: row.coin,
+          nickname: row.nickname,
+          profileImage: row.profile_image,
+          required: {
+              attendance: row.required_attendance,
+              photo: row.required_photo,
+              exercise: row.required_exercise
+          },
+          current: {
+              attendance: row.attendance_count,
+              photo: row.photo_count,
+              exercise: row.exercise_count
+          },
+          progress: progress,
+          reward: { 
+            attendance: row.reward_attendance,
+            photo: row.reward_photo,
+            exercise: row.reward_exercise
+          }
+      });
+  } catch (err) {
+      console.error("❌ Error fetching user challenge progress", err);
+      res.status(500).json({ error: "Server error" });
+  }
+});
+
+//서버에서 자동 레벨업 처리
+//user_challenge_progress와 challenge_level를 비교하여 자동 레벨업
+async function checkAndUpdateLevel(userId) {
+  const progress = await pool.query(`
+      SELECT attendance_count, photo_count, exercise_count
+      FROM user_challenge_progress
+      WHERE user_id = $1
+  `, [userId]);
+
+  const user = await pool.query(`SELECT level FROM users WHERE id = $1`, [userId]);
+  const currentLevel = user.rows[0].level;
+
+  // 다음 레벨 조건 가져오기
+  const nextLevel = currentLevel + 1;
+  const nextLevelReq = await pool.query(`
+      SELECT * FROM challenge_level WHERE level = $1
+  `, [nextLevel]);
+
+  if (nextLevelReq.rowCount === 0) return; // 더 이상 레벨 없음
+
+  const required = nextLevelReq.rows[0];
+
+  if (
+      progress.rows[0].attendance_count >= required.required_attendance &&
+      progress.rows[0].photo_count >= required.required_photo &&
+      progress.rows[0].exercise_count >= required.required_exercise
+  ) {
+      // ✅ 레벨업 실행
+      await pool.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
+  }
+}
+// 출석 1회 기록 로직 (user_attendance 없이 처리)
+app.post('/api/challenge/attendance/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  if (isNaN(userId)) {
+    return res.status(400).json({ message: 'Invalid userId' });
+  }
+
+  try {
+    // 1. 현재 출석 날짜 확인
+    const result = await pool.query(
+      `SELECT last_attendance_date FROM user_challenge_progress WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User progress not found' });
+    }
+
+    const lastDate = result.rows[0].last_attendance_date;
+    const alreadyCheckedToday = lastDate && lastDate.toISOString().split('T')[0] === today;
+
+    if (alreadyCheckedToday) {
+      return res.status(200).json({ message: '오늘 이미 출석함' });
+    }
+
+    // 2. 출석 처리: 카운트 증가 및 날짜 업데이트
+    await pool.query(
+      `UPDATE user_challenge_progress
+       SET attendance_count = attendance_count + 1,
+           last_attendance_date = $1
+       WHERE user_id = $2`,
+      [today, userId]
+    );
+
+    await checkAndUpdateLevel(userId); // ✅ 레벨업 검사
+
+    return res.json({ message: '출석 처리 완료' });
+
+  } catch (err) {
+    console.error('❌ 출석 처리 실패:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// 3. 운동 1회 기록 로직
+app.post('/api/challenge/exercise/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId);
+  const today = new Date().toISOString().split('T')[0];
+
+  try {
+      const result = await pool.query(
+          `SELECT * FROM user_exercise_log WHERE user_id = $1 AND date = $2`,
+          [userId, today]
+      );
+
+      if (result.rowCount === 0) {
+          // 운동 완료 여부 확인
+          const exerciseDone = await pool.query(`
+              SELECT COUNT(*) FROM exercise_schedule
+              WHERE date = $1 AND is_completed = true
+              AND exercise_plan_id IN (
+                  SELECT id FROM exercise_plan WHERE user_id = $1
+              )
+          `, [today, userId]);
+
+          if (parseInt(exerciseDone.rows[0].count) > 0) {
+              // 오늘 첫 운동 기록
+              await pool.query(
+                  `INSERT INTO user_exercise_log (user_id, date) VALUES ($1, $2)`,
+                  [userId, today]
+              );
+              await pool.query(
+                  `UPDATE user_challenge_progress SET exercise_count = exercise_count + 1 WHERE user_id = $1`,
+                  [userId]
+              );
+              await checkAndUpdateLevel(userId); // ✅ 운동 후 레벨업 검사
+          }
+      }
+
+      res.json({ message: '운동 처리 완료' });
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ✅ 사용자 이름, 레벨, 코인 + 챌린지 진행률 반환
+app.get('/api/user-challenge-progress/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId);
+
+  if (isNaN(userId)) {
+    return res.status(400).json({ message: "유효하지 않은 사용자 ID" });
+  }
+
+  try {
+    // 1. 사용자 정보 조회 (이름, 레벨, 코인)
+    const userResult = await pool.query(
+      `SELECT name, level, coin, COALESCE(profile_image, '') AS profile_image FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "사용자 없음" });
+    }
+
+    const user = userResult.rows[0];
+
+    // 2. 챌린지 진행 정보 조회
+    const progressResult = await pool.query(
+      `SELECT * FROM user_challenge_progress WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (progressResult.rows.length === 0) {
+      return res.status(404).json({ message: "챌린지 진행 정보 없음" });
+    }
+
+    const progress = progressResult.rows[0];
+
+    // 3. 퍼센트 계산 함수
+    const calculatePercent = (current, required) =>
+      Math.min(100, Math.floor((current / required) * 100));
+
+    // 4. 클라이언트에 반환할 JSON 구성
+    const response = {
+      nickname: user.name,
+      level: user.level,
+      coin: user.coin,
+      current: {
+        attendance: progress.attendance_count,
+        exercise: progress.exercise_count,
+        photo: progress.photo_count,
+      },
+      required: {
+        attendance: 5,
+        exercise: 3,
+        photo: 1
+      },
+      progress: {
+        attendancePercent: calculatePercent(progress.attendance_count, 5),
+        exercisePercent: calculatePercent(progress.exercise_count, 3),
+        photoPercent: calculatePercent(progress.photo_count, 1),
+      }
+    };
+
+    console.log("✅ 사용자 챌린지 정보 반환:", response);
+    res.json(response);
+
+  } catch (e) {
+    console.error("❌ 사용자 챌린지 정보 불러오기 실패:", e);
+    res.status(500).json({ message: "서버 오류" });
+  }
+});
+  
 
 // ✅ 서버 시작
 app.listen(port, "0.0.0.0", () => {
