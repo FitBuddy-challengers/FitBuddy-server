@@ -10,7 +10,7 @@ const app = express();
 const port = 3000;
 const router = express.Router();
 
-console.log("✅ server.js 실제 실행됨 - 최상단 로그 확인"); 
+console.log("server.js 실제 실행됨 - 최상단 로그 확인"); 
 
 app.use(cors());
 app.use('/api', router);
@@ -26,7 +26,8 @@ const pool = new Pool({
     port: process.env.DB_PORT,
 });
 
-// 사용자 챌린지 정보 조회 APIAdd commentMore actions
+
+// 사용자 챌린지 정보 조회 API
 router.get('/user-challenge-progress/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
 
@@ -273,7 +274,13 @@ app.post('/login', async (req, res) => {
 
 //앱 처음 실행 시 서버에서 더미 플랜 및 스케줄 자동 생성.
 app.post('/api/create-dummy-plan', async (req, res) => {
-  const { userId, date } = req.body;
+  console.log("[더미 플랜 요청] 전체 req.body:", req.body); 
+  const { user_id, date } = req.body; // ★★★ userId -> user_id로 변경 ★★★
+
+// JavaScript에서는 변수명을 카멜케이스로 사용하는 것이 일반적이므로,
+  // 추출한 user_id 값을 새로운 카멜케이스 변수에 할당하여 사용할 수 있습니다.
+  const userId = user_id; // ★★★ 이 userId 변수를 이후 로직에서 사용 ★★★
+
   console.log(`[더미 플랜 요청] userId: ${userId}, date: ${date}`);
 
   const client = await pool.connect();
@@ -375,7 +382,6 @@ app.post('/api/create-dummy-plan', async (req, res) => {
     client.release();
   }
 });
-
 // 서버에서 exercise 테이블 데이터를 json으로 리턴해야함! 그래야 안드로이드에서 getAllExercises()가 잘 작동.
 app.get("/api/exercises", async (req, res) => {
     try {
@@ -833,18 +839,18 @@ app.post("/api/schedule/:scheduleId/change-exercise", async (req, res) => {
   }
 });
 
-
-  // 즐겨찾기 상태 토글
-
-
   //스케줄 삭제
-  //실제 운동 스케줄 삭제 라우터 
+// 운동 스케줄 삭제 라우터
 app.delete('/api/schedule/:scheduleId', async (req, res) => {
-  const scheduleId = parseInt(req.params.scheduleId);
-  console.log("✅ 생성된 scheduleId:", scheduleId);
-  if (!scheduleId) {
-    console.log("⚠️ 유효하지 않은 scheduleId:", req.params.scheduleId);
-    return res.status(400).json({ message: "scheduleId가 필요합니다." });
+  const scheduleIdParam = req.params.scheduleId;
+  const scheduleId = parseInt(scheduleIdParam, 10); // 10진수로 변환
+
+  console.log(`[DELETE /api/schedule/:scheduleId] 요청 수신. Parameter: ${scheduleIdParam}, Parsed scheduleId: ${scheduleId}`);
+
+  // scheduleId가 숫자가 아니거나, 0 이하의 값인 경우 유효하지 않은 것으로 처리
+  if (isNaN(scheduleId) || scheduleId <= 0) {
+    console.warn(`[DELETE /api/schedule/:scheduleId] 유효하지 않은 scheduleId: ${scheduleIdParam} (파싱 후: ${scheduleId})`);
+    return res.status(400).json({ message: `유효하지 않은 scheduleId 입니다: ${scheduleIdParam}` });
   }
 
   const client = await pool.connect();
@@ -853,47 +859,75 @@ app.delete('/api/schedule/:scheduleId', async (req, res) => {
 
     console.log(`🗑️ 운동 스케줄 삭제 시작 → scheduleId: ${scheduleId}`);
 
-    // 🔹 연결된 세트 먼저 삭제
-    await client.query("DELETE FROM exercise_reps WHERE schedule_id = $1", [scheduleId]);
-    await client.query("DELETE FROM exercise_time WHERE schedule_id = $1", [scheduleId]);
+    // 1. 연결된 exercise_reps 삭제
+    const repsDeleteResult = await client.query("DELETE FROM exercise_reps WHERE schedule_id = $1", [scheduleId]);
+    console.log(`[DELETE /api/schedule/:scheduleId] exercise_reps 삭제 결과: ${repsDeleteResult.rowCount} 행 삭제됨 (scheduleId: ${scheduleId})`);
 
-    // ✅ 스케줄 자체 삭제
-    await client.query("DELETE FROM exercise_schedule WHERE id = $1", [scheduleId]);
+    // 2. 연결된 exercise_time 삭제
+    const timeDeleteResult = await client.query("DELETE FROM exercise_time WHERE schedule_id = $1", [scheduleId]);
+    console.log(`[DELETE /api/schedule/:scheduleId] exercise_time 삭제 결과: ${timeDeleteResult.rowCount} 행 삭제됨 (scheduleId: ${scheduleId})`);
+
+    // 3. exercise_schedule 자체 삭제
+    const scheduleDeleteResult = await client.query("DELETE FROM exercise_schedule WHERE id = $1", [scheduleId]);
+    console.log(`[DELETE /api/schedule/:scheduleId] exercise_schedule 삭제 결과: ${scheduleDeleteResult.rowCount} 행 삭제됨 (id: ${scheduleId})`);
+
+    // 실제로 스케줄이 삭제되었는지 확인 (rowCount가 0이면 해당 스케줄이 없었던 것)
+    if (scheduleDeleteResult.rowCount === 0) {
+      await client.query('ROLLBACK'); // 스케줄이 없었으므로 롤백 (이미 다른 곳에서 삭제되었거나 ID가 잘못된 경우)
+      console.warn(`[DELETE /api/schedule/:scheduleId] 삭제할 스케줄을 찾지 못했습니다 (scheduleId: ${scheduleId}). 트랜잭션 롤백됨.`);
+      return res.status(404).json({ message: "삭제할 운동 스케줄을 찾지 못했습니다." });
+    }
 
     await client.query('COMMIT');
-    console.log(`✅ 운동 스케줄 삭제 완료 → scheduleId: ${scheduleId}`);
-    res.status(200).json({ message: "운동 스케줄 삭제 완료" });
+    console.log(`✅ 운동 스케줄 삭제 완료 (scheduleId: ${scheduleId})`);
+    res.status(200).json({ message: "운동 스케줄이 성공적으로 삭제되었습니다." });
+
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error("❌ 운동 삭제 실패:", error);
-    res.status(500).json({ message: "서버 오류" });
+    console.error(`❌ 운동 스케줄 삭제 실패 (scheduleId: ${scheduleId}):`, error);
+    res.status(500).json({ message: "운동 스케줄 삭제 중 서버 오류가 발생했습니다.", detail: error.message });
   } finally {
     client.release();
   }
 });
   
-  app.get('/api/schedule-id', async (req, res) => {
-    const { planId, exerciseId } = req.query;
-    try {
-        const result = await pool.query(`
-            SELECT es.id FROM exercise_schedule es
-            LEFT JOIN exercise_reps er ON es.id = er.schedule_id
-            LEFT JOIN exercise_time et ON es.id = et.schedule_id
-            WHERE es.exercise_plan_id = $1 AND 
-                  (er.exercise_id = $2 OR et.exercise_id = $2)
-            LIMIT 1
-        `, [planId, exerciseId]);
+ 
+// 수정된 /api/schedule-id 엔드포인트
+app.get('/api/schedule-id', async (req, res) => {
+  const { planId, exerciseId } = req.query; // 클라이언트에서 planId와 exerciseId를 쿼리 파라미터로 받습니다.
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: "scheduleId not found" });
-        }
+  // planId 또는 exerciseId가 제공되지 않았거나 유효하지 않은 경우 오류 처리
+  if (!planId || !exerciseId) {
+      return res.status(400).json({ message: "planId와 exerciseId는 필수입니다." });
+  }
 
-        res.status(200).json({ scheduleId: result.rows[0].id });
-    } catch (error) {
-        console.error("scheduleId 조회 실패:", error);
-        res.status(500).json({ message: "서버 오류" });
-    }
+  try {
+      // exercise_schedule 테이블에서 exercise_plan_id와 exercise_id를 직접 사용하여 scheduleId (es.id)를 조회합니다.
+      // 이 방식이 더 정확하고, reps나 time 정보가 아직 없는 운동 스케줄도 올바르게 찾을 수 있습니다.
+      const sqlQuery = `
+          SELECT id FROM exercise_schedule
+          WHERE exercise_plan_id = $1 AND exercise_id = $2
+          ORDER BY id ASC -- 만약 중복 가능성이 있다면 정렬 후 첫번째 항목 사용 (또는 다른 기준 적용)
+          LIMIT 1
+      `;
+      const result = await pool.query(sqlQuery, [planId, exerciseId]);
+
+      if (result.rows.length === 0) {
+          // 해당 planId와 exerciseId에 맞는 스케줄이 없는 경우 404 반환
+          console.warn(`[GET /api/schedule-id] scheduleId를 찾을 수 없음. planId: ${planId}, exerciseId: ${exerciseId}`);
+          return res.status(404).json({ message: "해당 운동에 대한 스케줄 정보를 찾을 수 없습니다 (scheduleId not found)." });
+      }
+
+      // 성공적으로 scheduleId를 찾은 경우 반환
+      console.log(`[GET /api/schedule-id] scheduleId 조회 성공. planId: ${planId}, exerciseId: ${exerciseId}, scheduleId: ${result.rows[0].id}`);
+      res.status(200).json({ scheduleId: result.rows[0].id });
+
+  } catch (error) {
+      console.error(`[GET /api/schedule-id] scheduleId 조회 중 서버 오류 발생. planId: ${planId}, exerciseId: ${exerciseId}`, error);
+      res.status(500).json({ message: "scheduleId 조회 중 서버 오류가 발생했습니다." });
+  }
 });
+
 
 // ✅ REPS 세트 불러오기 (클라이언트가 실제 요청하는 경로)
 app.get('/api/reps-sets/:scheduleId', async (req, res) => {
@@ -926,6 +960,7 @@ app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
   console.log("🔥 세트 저장 요청 실행됨 - scheduleId:", scheduleId);
 
   const sets = req.body; // [{ set_number, reps, weight }, ...]
+  console.log(`🔥 [PATCH /api/schedule/:scheduleId/reps-sets] scheduleId: ${scheduleId}, 받은 세트:`, sets);
 
   if (!Array.isArray(sets)) {
     return res.status(400).json({ message: "잘못된 데이터 형식입니다." });
@@ -955,7 +990,7 @@ app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
       console.log("➕ 세트 삽입:", set);
       await client.query(
         `INSERT INTO exercise_reps (schedule_id, exercise_id, set_number, weight, reps, is_completed)
-         VALUES ($1, $2, $3, $4, $5, false)`,
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [scheduleId, exerciseId, set.set_number, set.weight, set.reps]
       );
     }
@@ -1114,24 +1149,55 @@ app.patch("/api/reps-sets/:scheduleId/complete-set", async (req, res) => {
   }
 });
 
+
 //개별 세트 완료
 app.patch('/api/sets/reps/complete', async (req, res) => {
-  const { scheduleId, setNumber, isCompleted } = req.body;
-
-  try {
-    const result = await pool.query(
-      `UPDATE exercise_reps 
-       SET is_completed = $1 
-       WHERE schedule_id = $2 AND set_number = $3`,
-      [isCompleted, scheduleId, setNumber]
-    );
-
-    res.status(200).json({ message: "Set completion updated successfully" });
-  } catch (err) {
-    console.error("Error updating set completion:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+    const { scheduleId, setNumber, isCompleted } = req.body;
+    console.log(`[PATCH /api/sets/reps/complete] 요청 수신됨. scheduleId: ${scheduleId}, setNumber: ${setNumber}, isCompleted: ${isCompleted}, typeof isCompleted: ${typeof isCompleted}`);
+  
+    if (typeof scheduleId === 'undefined' || typeof setNumber === 'undefined' || typeof isCompleted !== 'boolean') {
+      console.error('[PATCH /api/sets/reps/complete] 유효하지 않은 입력 타입 또는 누락된 파라미터. 수신된 req.body:', JSON.stringify(req.body));
+      return res.status(400).json({ message: "잘못된 입력: scheduleId, setNumber는 필수이며, isCompleted는 boolean 타입이어야 합니다." });
+    }
+  
+    const client = await pool.connect();
+  
+    try {
+      await client.query('BEGIN');
+  
+      // SQL 쿼리 문자열 정의
+      const sqlQuery = `UPDATE exercise_reps
+        SET is_completed = $1
+        WHERE schedule_id = $2 AND set_number = $3`;
+      
+      // ★★★ 실행될 SQL 쿼리와 파라미터 로깅 추가 ★★★
+      console.log('[PATCH /api/sets/reps/complete] 실행될 SQL:', sqlQuery);
+      console.log('[PATCH /api/sets/reps/complete] SQL 파라미터:', [isCompleted, scheduleId, setNumber]);
+  
+      const result = await client.query(sqlQuery, [isCompleted, scheduleId, setNumber]); // 이 부분이 오류 발생 지점(server.js:1140)으로 추정
+  
+      if (result.rowCount > 0) {
+        await client.query('COMMIT');
+        console.log(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 ${result.rowCount}개 행 업데이트 성공 및 커밋 완료.`);
+        res.status(200).json({ message: "세트 완료 상태가 성공적으로 업데이트되었습니다." });
+      } else {
+        await client.query('ROLLBACK');
+        console.warn(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 업데이트된 행 없음. 세트가 존재하지 않을 수 있음. 트랜잭션 롤백됨.`);
+        res.status(404).json({ message: `scheduleId ${scheduleId}, setNumber ${setNumber}에 해당하는 세트를 찾을 수 없습니다.` });
+      }
+    } catch (err) {
+      console.error('[PATCH /api/sets/reps/complete] 오류 발생, 트랜잭션 롤백됨.', err.message, err.stack); // err.message 와 err.stack 모두 로깅
+      if (client) {
+        try { await client.query('ROLLBACK'); }
+        catch (rollbackErr) { console.error('[PATCH /api/sets/reps/complete] 롤백 중 오류 발생.', rollbackErr.stack); }
+      }
+      res.status(500).json({ error: "세트 완료 상태 업데이트 중 서버 오류 발생.", detail: err.message }); // 클라이언트에게 오류 상세 메시지 전달
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  });
 
 //운동 완료api
 app.patch('/api/schedule/:scheduleId/complete', async (req, res) => {
