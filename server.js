@@ -182,16 +182,32 @@ app.post('/verify-otp', async (req, res) => {
         }
 
         if (otpStore[email] && otpStore[email] === otp) {
-            delete otpStore[email];
+          delete otpStore[email];
 
-            await pool.query(
-                'INSERT INTO users (email, password) VALUES ($1, $2)',
-                [userData.email, userData.password]
-            );
-            delete pendingUsers[email];
+          // 1. 사용자 생성
+          await pool.query(
+              'INSERT INTO users (email, password) VALUES ($1, $2)',
+              [userData.email, userData.password]
+          );
 
-            console.log(`[회원가입 성공] email: ${email}`);
-            return res.status(200).send({ message: '회원가입 완료' });
+          // 2. 생성된 사용자 ID 가져오기
+          const userIdResult = await pool.query('SELECT id FROM users WHERE email = $1', [userData.email]);
+          const newUserId = userIdResult.rows[0].id;
+
+          // 3. 챌린지 진행도 기본값 삽입
+          await pool.query(
+            `INSERT INTO user_challenge_progress (
+              user_id, attendance_count, photo_count, exercise_count, last_attendance_date
+            ) VALUES ($1, 0, 0, 0, NULL)`,
+            [newUserId]
+          ); // ← ✅ 세미콜론 꼭 붙이기!
+
+          // 4. 메모리에서 임시 데이터 삭제
+          delete pendingUsers[email];
+
+          console.log(`[회원가입 성공] email: ${email}`);
+          return res.status(200).send({ message: '회원가입 완료' });
+
         } else {
             console.log(`[인증 실패] email: ${email}, 입력 OTP: ${otp}, 저장된 OTP: ${otpStore[email]}`);
             return res.status(400).send({ message: '인증 실패: 인증번호가 만료되었거나 틀렸습니다.' });
