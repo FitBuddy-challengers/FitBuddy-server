@@ -1418,16 +1418,17 @@ async function checkAndUpdateLevel(userId) {
   }
 }
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
+// 출석 1회 기록 로직 (user_attendance 없이 처리)
 app.post('/api/challenge/attendance/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0];
 
   if (isNaN(userId)) {
     return res.status(400).json({ message: 'Invalid userId' });
   }
 
   try {
-    // 1. 현재 출석 날짜 확인
+    // 1. 오늘 이미 출석했는지 확인
     const result = await pool.query(
       `SELECT last_attendance_date FROM user_challenge_progress WHERE user_id = $1`,
       [userId]
@@ -1444,7 +1445,7 @@ app.post('/api/challenge/attendance/:userId', async (req, res) => {
       return res.status(200).json({ message: '오늘 이미 출석함' });
     }
 
-    // 2. 출석 처리: 카운트 증가 및 날짜 업데이트
+    // 2. 출석 처리
     await pool.query(
       `UPDATE user_challenge_progress
        SET attendance_count = attendance_count + 1,
@@ -1453,7 +1454,22 @@ app.post('/api/challenge/attendance/:userId', async (req, res) => {
       [today, userId]
     );
 
-    await checkAndUpdateLevel(userId); // ✅ 레벨업 검사
+    // 3. ✅ 보상 지급: 출석 5회 달성 시 코인 지급
+    const rewardResult = await pool.query(
+      `SELECT attendance_count FROM user_challenge_progress WHERE user_id = $1`,
+      [userId]
+    );
+    const attendanceCount = rewardResult.rows[0].attendance_count;
+
+    if (attendanceCount === 5) {
+      await pool.query(
+        `UPDATE users SET coin = coin + 300 WHERE id = $1`,
+        [userId]
+      );
+      console.log(`🎁 코인 보상 지급 완료! userId=${userId}, amount=300`);
+    }
+
+    await checkAndUpdateLevel(userId); // 레벨업 검사
 
     return res.json({ message: '출석 처리 완료' });
 
