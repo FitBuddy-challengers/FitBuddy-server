@@ -182,16 +182,32 @@ app.post('/verify-otp', async (req, res) => {
         }
 
         if (otpStore[email] && otpStore[email] === otp) {
-            delete otpStore[email];
+          delete otpStore[email];
 
-            await pool.query(
-                'INSERT INTO users (email, password) VALUES ($1, $2)',
-                [userData.email, userData.password]
-            );
-            delete pendingUsers[email];
+          // 1. 사용자 생성
+          await pool.query(
+              'INSERT INTO users (email, password) VALUES ($1, $2)',
+              [userData.email, userData.password]
+          );
 
-            console.log(`[회원가입 성공] email: ${email}`);
-            return res.status(200).send({ message: '회원가입 완료' });
+          // 2. 생성된 사용자 ID 가져오기
+          const userIdResult = await pool.query('SELECT id FROM users WHERE email = $1', [userData.email]);
+          const newUserId = userIdResult.rows[0].id;
+
+          // 3. 챌린지 진행도 기본값 삽입
+          await pool.query(
+            `INSERT INTO user_challenge_progress (
+              user_id, attendance_count, photo_count, exercise_count, last_attendance_date
+            ) VALUES ($1, 0, 0, 0, NULL)`,
+            [newUserId]
+          ); // ← ✅ 세미콜론 꼭 붙이기!
+
+          // 4. 메모리에서 임시 데이터 삭제
+          delete pendingUsers[email];
+
+          console.log(`[회원가입 성공] email: ${email}`);
+          return res.status(200).send({ message: '회원가입 완료' });
+
         } else {
             console.log(`[인증 실패] email: ${email}, 입력 OTP: ${otp}, 저장된 OTP: ${otpStore[email]}`);
             return res.status(400).send({ message: '인증 실패: 인증번호가 만료되었거나 틀렸습니다.' });
@@ -1402,16 +1418,17 @@ async function checkAndUpdateLevel(userId) {
   }
 }
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
+// 출석 1회 기록 로직 (user_attendance 없이 처리)
 app.post('/api/challenge/attendance/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0];
 
   if (isNaN(userId)) {
     return res.status(400).json({ message: 'Invalid userId' });
   }
 
   try {
-    // 1. 현재 출석 날짜 확인
+    // 1. 오늘 이미 출석했는지 확인
     const result = await pool.query(
       `SELECT last_attendance_date FROM user_challenge_progress WHERE user_id = $1`,
       [userId]
@@ -1428,7 +1445,7 @@ app.post('/api/challenge/attendance/:userId', async (req, res) => {
       return res.status(200).json({ message: '오늘 이미 출석함' });
     }
 
-    // 2. 출석 처리: 카운트 증가 및 날짜 업데이트
+    // 2. 출석 처리
     await pool.query(
       `UPDATE user_challenge_progress
        SET attendance_count = attendance_count + 1,
@@ -1437,7 +1454,22 @@ app.post('/api/challenge/attendance/:userId', async (req, res) => {
       [today, userId]
     );
 
-    await checkAndUpdateLevel(userId); // ✅ 레벨업 검사
+    // 3. ✅ 보상 지급: 출석 5회 달성 시 코인 지급
+    const rewardResult = await pool.query(
+      `SELECT attendance_count FROM user_challenge_progress WHERE user_id = $1`,
+      [userId]
+    );
+    const attendanceCount = rewardResult.rows[0].attendance_count;
+
+    if (attendanceCount === 5) {
+      await pool.query(
+        `UPDATE users SET coin = coin + 300 WHERE id = $1`,
+        [userId]
+      );
+      console.log(`🎁 코인 보상 지급 완료! userId=${userId}, amount=300`);
+    }
+
+    await checkAndUpdateLevel(userId); // 레벨업 검사
 
     return res.json({ message: '출석 처리 완료' });
 
@@ -1557,6 +1589,107 @@ app.get('/api/user-challenge-progress/:userId', async (req, res) => {
   }
 });
   
+// ✅ 특정 사용자가 소유한 모든 아이템 ID 목록을 반환하는 API
+app.get('/api/store/owned-items', async (req, res) => {
+    const userId = parseInt(req.query.userId);
+
+    if (isNaN(userId)) {
+        return res.status(400).json({ message: "userId는 필수입니다." });
+    }
+
+    try {
+        const result = await pool.query(
+            'SELECT item_id FROM user_owned_items WHERE user_id = $1',
+            [userId]
+        );
+        // DB에서 가져온 item_id가 숫자 타입이므로, 그대로 배열로 만듭니다.
+        const ownedItemIds = result.rows.map(row => row.item_id);
+        
+        console.log(`[소유 아이템 조회] userId: ${userId}, 소유 아이템 수: ${ownedItemIds.length}`);
+        res.json(ownedItemIds); // 예시: [1, 101, 102, 401] 형태의 숫자 배열 반환
+
+    } catch (error) {
+        console.error('❌ 소유 아이템 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+
+// ✅ 아이템 구매 API (userId와 itemId만 사용)
+app.post('/api/store/purchase', async (req, res) => {
+    // Retrofit의 FieldNamingPolicy에 따라 snake_case로 전달됨
+    const { user_id, item_id } = req.body;
+    const userId = parseInt(user_id);
+    const itemId = parseInt(item_id);
+
+    console.log(`[아이템 구매 요청] userId: ${userId}, itemId: ${itemId}`);
+
+    if (isNaN(userId) || isNaN(itemId)) {
+        return res.status(400).json({ success: false, message: '사용자 ID와 아이템 ID는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // ★ DB에서 아이템 정보(가격, 필요 레벨) 조회 (하드코딩된 배열 제거)
+        const itemResult = await client.query('SELECT price, required_level FROM items WHERE id = $1', [itemId]);
+        if (itemResult.rows.length === 0) {
+            // ROLLBACK 후 에러 응답
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: '존재하지 않는 아이템입니다.' });
+        }
+        const itemToPurchase = itemResult.rows[0];
+        const itemPrice = itemToPurchase.price;
+        const requiredLevel = itemToPurchase.required_level;
+
+        // 1. 유저 레벨 및 코인 확인 (FOR UPDATE로 동시성 문제 방지)
+        const userResult = await client.query('SELECT level, coin FROM users WHERE id = $1 FOR UPDATE', [userId]);
+        if (userResult.rows.length === 0) {
+            throw new Error('사용자를 찾을 수 없습니다.');
+        }
+        const user = userResult.rows[0];
+
+        // 2. 조건 확인 (레벨, 코인, 이미 소유 여부)
+        if (user.level < requiredLevel) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ success: false, message: `레벨 ${requiredLevel}이 필요합니다.` });
+        }
+        if (user.coin < itemPrice) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: '코인이 부족합니다.' });
+        }
+
+        const ownedResult = await client.query('SELECT * FROM user_owned_items WHERE user_id = $1 AND item_id = $2', [userId, itemId]);
+        if (ownedResult.rows.length > 0) {
+             await client.query('ROLLBACK');
+             return res.status(400).json({ success: false, message: '이미 소유하고 있는 아이템입니다.' });
+        }
+
+        // 3. 코인 차감
+        const newCoin = user.coin - itemPrice;
+        await client.query('UPDATE users SET coin = $1 WHERE id = $2', [newCoin, userId]);
+
+        // 4. 아이템 소유 정보 기록
+        await client.query(
+            'INSERT INTO user_owned_items (user_id, item_id) VALUES ($1, $2)',
+            [userId, itemId]
+        );
+
+        await client.query('COMMIT');
+        console.log(`✅ [구매 성공] userId: ${userId}, itemId: ${itemId}, price: ${itemPrice}, 남은 코인: ${newCoin}`);
+        res.json({ success: true, message: '구매에 성공했습니다!', updatedCoin: newCoin });
+
+    } catch (error) {
+        // try 블록 내에서 오류 발생 시 ROLLBACK
+        await client.query('ROLLBACK');
+        console.error('❌ 아이템 구매 실패:', error);
+        res.status(500).json({ success: false, message: '구매 처리 중 서버 오류가 발생했습니다.' });
+    } finally {
+        // 항상 연결 해제
+        client.release();
+    }
+});
 
 // ✅ 서버 시작
 app.listen(port, "0.0.0.0", () => {
