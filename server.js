@@ -38,12 +38,12 @@ router.post('/generate-routine', async (req, res) => {
   const { user_info, schedule_info } = req.body;
 
   if (!user_info || !schedule_info) {
-    return res.status(400).json({ error: '필수 정보 누락' });
+    return res.status(400).json({ error: '필수 정보 누락' }); 
+    ////
   }
 
   const prompt = `
 당신은 퍼스널 트레이너입니다. 다음 정보를 참고하여 운동 루틴을 구성해 주세요.
-
 [사용자 정보]
 이름: ${user_info.name}
 나이대: ${user_info.age_group}
@@ -1587,42 +1587,50 @@ app.post('/api/challenge/attendance/:userId', async (req, res) => {
 // 3. 운동 1회 기록 로직
 app.post('/api/challenge/exercise/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId);
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD' 문자열
 
   try {
-      const result = await pool.query(
-          `SELECT * FROM user_exercise_log WHERE user_id = $1 AND date = $2`,
+    // ✅ [1] 오늘 이미 운동 기록했는지 확인 (DATE 처리로 timestamp와 비교)
+    const result = await pool.query(
+      `SELECT * FROM user_exercise_log WHERE user_id = $1 AND DATE(date) = $2`,
+      [userId, today]
+    );
+
+    if (result.rowCount === 0) {
+      // ✅ [2] 오늘 완료된 운동이 있는지 확인 (DATE 처리 추가)
+      const exerciseDone = await pool.query(`
+        SELECT COUNT(*) FROM exercise_schedule
+        WHERE DATE(date) = $1 AND is_completed = true
+        AND exercise_plan_id IN (
+          SELECT id FROM exercise_plan WHERE user_id = $2
+        )
+      `, [today, userId]);
+
+      if (parseInt(exerciseDone.rows[0].count) > 0) {
+        // ✅ [3] 운동 완료 기록 추가
+        await pool.query(
+          `INSERT INTO user_exercise_log (user_id, date) VALUES ($1, $2)`,
           [userId, today]
-      );
+        );
 
-      if (result.rowCount === 0) {
-          // 운동 완료 여부 확인
-          const exerciseDone = await pool.query(`
-              SELECT COUNT(*) FROM exercise_schedule
-              WHERE date = $1 AND is_completed = true
-              AND exercise_plan_id IN (
-                  SELECT id FROM exercise_plan WHERE user_id = $1
-              )
-          `, [today, userId]);
-
-          if (parseInt(exerciseDone.rows[0].count) > 0) {
-              // 오늘 첫 운동 기록
-              await pool.query(
-                  `INSERT INTO user_exercise_log (user_id, date) VALUES ($1, $2)`,
-                  [userId, today]
-              );
-              await pool.query(
-                  `UPDATE user_challenge_progress SET exercise_count = exercise_count + 1 WHERE user_id = $1`,
-                  [userId]
-              );
-              await checkAndUpdateLevel(userId); // ✅ 운동 후 레벨업 검사
-          }
+        // ✅ [4] 개인 챌린지 기록 반영 (중복 방지 & 날짜 조건 처리)
+        await pool.query(`
+          INSERT INTO user_challenge_progress (user_id, exercise_count, last_attendance_date)
+          VALUES ($1, 1, $2)
+          ON CONFLICT (user_id) DO UPDATE
+          SET
+            exercise_count = user_challenge_progress.exercise_count + 1,
+            last_attendance_date = $2;
+        `, [userId, today]);
+        // ✅ [5] 레벨 업 조건 확인
+        await checkAndUpdateLevel(userId);
       }
+    }
 
-      res.json({ message: '운동 처리 완료' });
+    res.json({ message: '운동 처리 완료' });
   } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Server error' });
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
