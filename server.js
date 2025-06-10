@@ -94,6 +94,37 @@ console.log("server.js 실제 실행됨 - 최상단 로그 확인");
 
 //app.use(bodyParser.json());
 
+// ✅ 여기 추가하세요
+router.get('/user-info/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  try {
+    const result = await pool.query(`
+      SELECT name, age_group, gender, height, weight, diseases, workout_level, preferred_workouts, equipment
+      FROM users
+      WHERE id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      name: row.name,
+      age_group: row.age_group,
+      gender: row.gender,
+      height: row.height,
+      weight: row.weight,
+      disease: row.diseases,
+      exercise_level: row.workout_level,
+      preferred_exercises: row.preferred_workouts?.split(',') ?? [],
+      exercise_equipment: row.equipment?.split(',') ?? [],
+    });
+  } catch (err) {
+    console.error('❌ getUserInfo 실패:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 
 
