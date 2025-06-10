@@ -1989,7 +1989,8 @@ app.get('/api/records/monthly-summary', async (req, res) => {
     }
 });
 
-// ✅ 기간별 레이더 차트 데이터 조회 API 
+
+// ✅ 기간별 레이더 차트 데이터 조회 API (복합 부위 처리 로직 추가)
 app.get('/api/records/radar-data', async (req, res) => {
     const userId = parseInt(req.query.userId, 10);
     const period = req.query.period;
@@ -2022,10 +2023,7 @@ app.get('/api/records/radar-data', async (req, res) => {
 
         // 1. 시간 기반 운동의 운동량 조회
         const timeResult = await pool.query(`
-            SELECT 
-                e.part,
-                -- ★★★ 밀리초(ms)는 60000으로 나누어 분으로 변환 ★★★
-                (t.elapsed_time_millis / 60000.0 * e.mets) as volume
+            SELECT e.part, (t.elapsed_time_millis / 60000.0 * e.mets) as volume
             FROM exercise_time t
             JOIN exercise_schedule s ON t.schedule_id = s.id
             JOIN exercise_plan p ON s.exercise_plan_id = p.id
@@ -2035,10 +2033,7 @@ app.get('/api/records/radar-data', async (req, res) => {
 
         // 2. 횟수 기반 운동의 운동량 조회
         const repsResult = await pool.query(`
-            SELECT 
-                e.part,
-                -- ★★★ 초(s)는 60으로 나누어 분으로 변환 ★★★
-                (r.time_seconds / 60.0 * e.mets) as volume
+            SELECT e.part, (r.time_seconds / 60.0 * e.mets) as volume
             FROM exercise_reps r
             JOIN exercise_schedule s ON r.schedule_id = s.id
             JOIN exercise_plan p ON s.exercise_plan_id = p.id
@@ -2046,13 +2041,21 @@ app.get('/api/records/radar-data', async (req, res) => {
             WHERE p.user_id = $1 AND s.date >= $2 AND r.is_completed = true AND r.time_seconds > 0;
         `, [userId, startDateString]);
 
-        // 3. 서버에서 두 결과를 합산하고 부위별로 집계
+        // ★★★ 3. 두 결과를 합산하고, 복합 부위를 분배하여 집계 ★★★
         const partVolumeMap = { "가슴": 0, "등": 0, "하체": 0, "어깨": 0, "팔": 0, "복근": 0, "유산소": 0 };
         
         const processRows = (rows) => {
             rows.forEach(row => {
-                if (row.part in partVolumeMap) {
-                    partVolumeMap[row.part] += parseFloat(row.volume);
+                const parts = row.part.split(',').map(p => p.trim()); // "가슴, 팔" -> ["가슴", "팔"]
+                const volume = parseFloat(row.volume);
+                
+                if (parts.length > 0) {
+                    const volumePerPart = volume / parts.length; // 운동량을 부위 개수만큼 나눔
+                    parts.forEach(part => {
+                        if (part in partVolumeMap) {
+                            partVolumeMap[part] += volumePerPart; // 각 부위에 분배된 운동량을 더함
+                        }
+                    });
                 }
             });
         };
@@ -2073,7 +2076,6 @@ app.get('/api/records/radar-data', async (req, res) => {
         res.status(500).json({ message: '서버 오류' });
     }
 });
-
 
 // 사용자의 모든 신체 기록 가져오기
 app.get('/api/records/weight', async (req, res) => {
