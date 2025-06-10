@@ -18,4 +18,8 @@
     "openai": "^5.1.1",
     "pg": "^8.14.1"
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b45f3f8 (✅ clean commit without node_modules)
