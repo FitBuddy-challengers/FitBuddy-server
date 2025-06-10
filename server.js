@@ -8,23 +8,93 @@ require('dotenv').config();
 
 const app = express();
 const port = 3000;
-const router = express.Router();
 
-console.log("server.js 실제 실행됨 - 최상단 로그 확인"); 
-
+// 미들웨어 등록
 app.use(cors());
-app.use('/api', router);
-
 app.use(bodyParser.json());
 
 // PostgreSQL 연결
 const pool = new Pool({
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST,
-    database: process.env.DB_DATABASE,
-    password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_DATABASE,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
 });
+
+//  GPT API 설정
+const OpenAI = require('openai');
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+
+//  라우터 선언 및 설정
+const router = express.Router();
+
+
+
+
+//  GPT 운동 루틴 생성 라우터
+router.post('/generate-routine', async (req, res) => {
+  const { user_info, schedule_info } = req.body;
+
+  if (!user_info || !schedule_info) {
+    return res.status(400).json({ error: '필수 정보 누락' });
+  }
+
+  const prompt = `
+당신은 퍼스널 트레이너입니다. 다음 정보를 참고하여 운동 루틴을 구성해 주세요.
+
+[사용자 정보]
+이름: ${user_info.name}
+나이대: ${user_info.age_group}
+성별: ${user_info.gender}
+키: ${user_info.height} cm
+몸무게: ${user_info.weight} kg
+지병: ${user_info.disease}
+운동 수준: ${user_info.exercise_level}
+선호 운동: ${user_info.preferred_exercises?.join(', ') || ''}
+운동 기구: ${user_info.exercise_equipment?.join(', ') || ''}
+
+[운동 계획 정보]
+운동 시작일: ${schedule_info.start_date}
+운동 종료일: ${schedule_info.end_date}
+운동 요일: ${schedule_info.days_of_week?.join(', ') || ''}
+강화 부위: ${schedule_info.focus_area}
+
+[요청 형식]
+- 운동명, 횟수, 세트수 포함
+- 예: "스쿼트" "20"회 "3"세트
+- 시간 표현 대신 횟수/세트로
+- 반드시 스트레칭으로 마무리
+`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: '너는 전문적인 퍼스널 트레이너 AI야.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+    });
+
+    const result = completion.choices[0].message.content;
+    res.json({ plan_text: result.trim() });
+  } catch (error) {
+    console.error('❌ GPT 호출 실패:', error.response?.data || error.message);
+    res.status(500).json({ error: '루틴 생성 실패' });
+  }
+});
+
+
+console.log("server.js 실제 실행됨 - 최상단 로그 확인"); 
+
+//app.use(cors());
+
+
+//app.use(bodyParser.json());
+
+
 
 
 // 사용자 챌린지 정보 조회 API
@@ -118,6 +188,10 @@ router.get('/user-challenge-progress/:userId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// ✅ 반드시 router 정의 후 app.use로 등록해야 함
+app.use('/api', router);
+
 
 // Nodemailer 설정
 const transporter = nodemailer.createTransport({
@@ -1166,54 +1240,85 @@ app.patch("/api/reps-sets/:scheduleId/complete-set", async (req, res) => {
 });
 
 
-//개별 세트 완료
+//reps 세트 완료
 app.patch('/api/sets/reps/complete', async (req, res) => {
-    const { scheduleId, setNumber, isCompleted } = req.body;
-    console.log(`[PATCH /api/sets/reps/complete] 요청 수신됨. scheduleId: ${scheduleId}, setNumber: ${setNumber}, isCompleted: ${isCompleted}, typeof isCompleted: ${typeof isCompleted}`);
-  
+    const { scheduleId, setNumber, isCompleted, time_seconds } = req.body;
+    console.log(`[PATCH /api/sets/reps/complete] 요청 수신됨. scheduleId: ${scheduleId}, setNumber: ${setNumber}, isCompleted: ${isCompleted}, time_seconds: ${time_seconds}`);
+    
     if (typeof scheduleId === 'undefined' || typeof setNumber === 'undefined' || typeof isCompleted !== 'boolean') {
-      console.error('[PATCH /api/sets/reps/complete] 유효하지 않은 입력 타입 또는 누락된 파라미터. 수신된 req.body:', JSON.stringify(req.body));
-      return res.status(400).json({ message: "잘못된 입력: scheduleId, setNumber는 필수이며, isCompleted는 boolean 타입이어야 합니다." });
+        console.error('[PATCH /api/sets/reps/complete] 유효하지 않은 입력 타입 또는 누락된 파라미터. 수신된 req.body:', JSON.stringify(req.body));
+        return res.status(400).json({ message: "잘못된 입력: scheduleId, setNumber는 필수이며, isCompleted는 boolean 타입이어야 합니다." });
     }
-  
+    
     const client = await pool.connect();
-  
+    
     try {
-      await client.query('BEGIN');
+        await client.query('BEGIN');
   
       // SQL 쿼리 문자열 정의
-      const sqlQuery = `UPDATE exercise_reps
-        SET is_completed = $1
-        WHERE schedule_id = $2 AND set_number = $3`;
-      
-      // ★★★ 실행될 SQL 쿼리와 파라미터 로깅 추가 ★★★
-      console.log('[PATCH /api/sets/reps/complete] 실행될 SQL:', sqlQuery);
-      console.log('[PATCH /api/sets/reps/complete] SQL 파라미터:', [isCompleted, scheduleId, setNumber]);
-  
-      const result = await client.query(sqlQuery, [isCompleted, scheduleId, setNumber]); // 이 부분이 오류 발생 지점(server.js:1140)으로 추정
-  
-      if (result.rowCount > 0) {
-        await client.query('COMMIT');
-        console.log(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 ${result.rowCount}개 행 업데이트 성공 및 커밋 완료.`);
-        res.status(200).json({ message: "세트 완료 상태가 성공적으로 업데이트되었습니다." });
-      } else {
-        await client.query('ROLLBACK');
-        console.warn(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 업데이트된 행 없음. 세트가 존재하지 않을 수 있음. 트랜잭션 롤백됨.`);
-        res.status(404).json({ message: `scheduleId ${scheduleId}, setNumber ${setNumber}에 해당하는 세트를 찾을 수 없습니다.` });
-      }
+     const sqlQuery = `UPDATE exercise_reps 
+          SET is_completed = $1,
+              time_seconds = COALESCE($4, time_seconds) 
+          WHERE schedule_id = $2 AND set_number = $3`;
+           
+        console.log('[PATCH /api/sets/reps/complete] 실행될 SQL:', sqlQuery);
+        console.log('[PATCH /api/sets/reps/complete] SQL 파라미터:', [isCompleted, scheduleId, setNumber, time_seconds]); // 파라미터에 time_seconds 추가
+
+     const result = await client.query(sqlQuery, [isCompleted, scheduleId, setNumber, time_seconds]);
+    
+        if (result.rowCount > 0) {
+            await client.query('COMMIT');
+            console.log(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 ${result.rowCount}개 행 업데이트 성공 및 커밋 완료.`);
+            res.status(200).json({ message: "세트 완료 상태가 성공적으로 업데이트되었습니다." });
+        } else {
+            await client.query('ROLLBACK');
+            console.warn(`[PATCH /api/sets/reps/complete] scheduleId: ${scheduleId}, setNumber: ${setNumber}에 대해 업데이트된 행 없음. 트랜잭션 롤백됨.`);
+            res.status(404).json({ message: `scheduleId ${scheduleId}, setNumber ${setNumber}에 해당하는 세트를 찾을 수 없습니다.` });
+        }
     } catch (err) {
-      console.error('[PATCH /api/sets/reps/complete] 오류 발생, 트랜잭션 롤백됨.', err.message, err.stack); // err.message 와 err.stack 모두 로깅
-      if (client) {
-        try { await client.query('ROLLBACK'); }
-        catch (rollbackErr) { console.error('[PATCH /api/sets/reps/complete] 롤백 중 오류 발생.', rollbackErr.stack); }
-      }
-      res.status(500).json({ error: "세트 완료 상태 업데이트 중 서버 오류 발생.", detail: err.message }); // 클라이언트에게 오류 상세 메시지 전달
+        console.error('[PATCH /api/sets/reps/complete] 오류 발생, 트랜잭션 롤백됨.', err.stack);
+        if (client) {
+            try { await client.query('ROLLBACK'); }
+            catch (rollbackErr) { console.error('[PATCH /api/sets/reps/complete] 롤백 중 오류 발생.', rollbackErr.stack); }
+        }
+        res.status(500).json({ error: "세트 완료 상태 업데이트 중 서버 오류 발생.", detail: err.message });
     } finally {
-      if (client) {
-        client.release();
-      }
+        if (client) {
+            client.release();
+        }
     }
-  });
+});
+
+// time 세트 완료 
+app.patch('/api/sets/time/complete', async (req, res) => {
+    const { scheduleId, setNumber, isCompleted, elapsedTimeMillis } = req.body;
+    console.log(`[PATCH /api/sets/time/complete] 요청 수신: scheduleId=${scheduleId}, setNumber=${setNumber}, isCompleted=${isCompleted}, elapsedTimeMillis=${elapsedTimeMillis}`);
+
+    if (scheduleId === undefined || setNumber === undefined || isCompleted === undefined) {
+        return res.status(400).json({ message: 'scheduleId, setNumber, isCompleted는 필수입니다.' });
+    }
+
+    try {
+        const result = await pool.query(
+            `UPDATE exercise_time 
+             SET is_completed = $1, 
+                 elapsed_time_millis = COALESCE($2, elapsed_time_millis)
+             WHERE schedule_id = $3 AND set_number = $4
+             RETURNING *;`,
+            [isCompleted, elapsedTimeMillis, scheduleId, setNumber]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: '해당 세트를 찾을 수 없습니다.' });
+        }
+        
+        res.status(200).json({ message: '시간 세트가 성공적으로 업데이트되었습니다.', data: result.rows[0] });
+
+    } catch (error) {
+        console.error('❌ 시간 세트 업데이트 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
 
 //운동 완료api
 app.patch('/api/schedule/:scheduleId/complete', async (req, res) => {
@@ -1661,7 +1766,7 @@ app.post('/api/store/purchase', async (req, res) => {
         }
 
         const ownedResult = await client.query('SELECT * FROM user_owned_items WHERE user_id = $1 AND item_id = $2', [userId, itemId]);
-        if (ownedResult.rows.length > 0) {
+        if (ownedResult.rows.length > 0) { //
              await client.query('ROLLBACK');
              return res.status(400).json({ success: false, message: '이미 소유하고 있는 아이템입니다.' });
         }
@@ -1688,6 +1793,342 @@ app.post('/api/store/purchase', async (req, res) => {
     } finally {
         // 항상 연결 해제
         client.release();
+    }
+});
+
+
+// 월별 운동 완료율 조회 API
+app.get('/api/records/monthly-completion', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    const year = parseInt(req.query.year, 10);
+    const month = parseInt(req.query.month, 10);
+
+    if (isNaN(userId) || isNaN(year) || isNaN(month)) {
+        return res.status(400).json({ message: 'userId, year, month는 필수입니다.' });
+    }
+
+    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+    try {
+        const result = await pool.query(`
+            SELECT
+                to_char(s.date, 'YYYY-MM-DD') AS date,
+                (COUNT(CASE WHEN s.is_completed THEN 1 END) * 100.0 / COUNT(*))::integer AS completion_rate
+            FROM exercise_schedule s
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            WHERE p.user_id = $1 AND s.date BETWEEN $2 AND $3
+            GROUP BY s.date
+            ORDER BY s.date;
+        `, [userId, startDate, endDate]);
+
+        console.log(`[월별 기록 조회] userId: ${userId}, ${year}-${month}, 결과 수: ${result.rows.length}`);
+        res.json(result.rows); // ex: [{ date: '2025-06-10', completion_rate: 100 }]
+    } catch (error) {
+        console.error('❌ 월별 운동 완료율 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+// 특정 날짜의 운동 기록 조회 API
+app.get('/api/records/daily', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    const date = req.query.date; // "YYYY-MM-DD"
+
+    if (isNaN(userId) || !date) {
+        return res.status(400).json({ message: 'userId와 date는 필수입니다.' });
+    }
+
+    try {
+        const planResult = await pool.query(
+            `SELECT id FROM exercise_plan WHERE user_id = $1 AND $2::date BETWEEN start_date AND end_date LIMIT 1`,
+            [userId, date]
+        );
+
+        if (planResult.rowCount === 0) {
+            return res.json([]); // 해당 날짜에 계획이 없으면 빈 배열 반환
+        }
+        const planId = planResult.rows[0].id;
+
+        const schedResult = await pool.query(`
+            SELECT
+                s.id AS schedule_id, s.is_completed,
+                e.name AS exercise_name, e.is_time_type
+            FROM exercise_schedule s
+            JOIN exercise e ON s.exercise_id = e.id
+            WHERE s.exercise_plan_id = $1 AND s.date = $2
+            ORDER BY s.exercise_order;
+        `, [planId, date]);
+
+        const records = [];
+        for (const sched of schedResult.rows) {
+            let sets = 0, reps = null, seconds = null;
+
+            if (sched.is_time_type) {
+                const timeRes = await pool.query(
+                    `SELECT COUNT(*) AS count, MAX(elapsed_time_millis) AS max_seconds FROM exercise_time WHERE schedule_id = $1`,
+                    [sched.schedule_id]
+                );
+                sets = parseInt(timeRes.rows[0].count || 0);
+                seconds = Math.floor(parseInt(timeRes.rows[0].max_seconds || 0) / 1000);
+            } else {
+                const repsRes = await pool.query(
+                    `SELECT COUNT(*) AS count, MAX(reps) AS max_reps FROM exercise_reps WHERE schedule_id = $1`,
+                    [sched.schedule_id]
+                );
+                sets = parseInt(repsRes.rows[0].count || 0);
+                reps = parseInt(repsRes.rows[0].max_reps || 0);
+            }
+
+            records.push({
+                exercise_name: sched.exercise_name,
+                reps: reps,
+                sets: sets,
+                seconds: seconds,
+                is_completed: sched.is_completed,
+                is_time_type: sched.is_time_type
+            });
+        }
+
+        console.log(`[일별 기록 조회] userId: ${userId}, date: ${date}, 결과 수: ${records.length}`);
+        res.json(records);
+    } catch (error) {
+        console.error('❌ 특정 날짜 운동 기록 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+// 이번 달 주요 운동 정보 조회 API 
+app.get('/api/records/monthly-summary', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    if (isNaN(userId)) {
+        return res.status(400).json({ message: 'userId는 필수입니다.' });
+    }
+
+    try {
+        const date = new Date();
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        // 공통 테이블 표현식(CTE)은 그대로 사용
+        const baseQuery = `
+            WITH monthly_completed_workouts AS (
+                SELECT 
+                    s.exercise_id,
+                    (r.time_seconds * 1000) AS duration_ms
+                FROM exercise_schedule s
+                JOIN exercise_plan p ON s.exercise_plan_id = p.id
+                JOIN exercise_reps r ON s.id = r.schedule_id
+                WHERE p.user_id = $1 AND s.date BETWEEN $2 AND $3 AND r.is_completed = true AND r.time_seconds > 0
+                UNION ALL
+                SELECT 
+                    s.exercise_id,
+                    t.elapsed_time_millis AS duration_ms
+                FROM exercise_schedule s
+                JOIN exercise_plan p ON s.exercise_plan_id = p.id
+                JOIN exercise_time t ON s.id = t.schedule_id
+                WHERE p.user_id = $1 AND s.date BETWEEN $2 AND $3 AND t.is_completed = true AND t.elapsed_time_millis > 0
+            )
+        `;
+
+        // ★★★ 1. 가장 많이 한 운동 부위 조회를 위해 로직 변경 ★★★
+        // 먼저 모든 운동 기록을 가져와서 서버에서 직접 계산
+        const allWorkoutsResult = await pool.query(`
+            ${baseQuery}
+            SELECT e.part, w.duration_ms
+            FROM monthly_completed_workouts w
+            JOIN exercise e ON w.exercise_id = e.id;
+        `, [userId, firstDay, lastDay]);
+
+        // JavaScript에서 부위별로 시간을 분배하고 합산
+        const partDurationMap = {};
+        allWorkoutsResult.rows.forEach(row => {
+            const parts = row.part.split(',').map(p => p.trim());
+            const duration = parseFloat(row.duration_ms);
+            if (parts.length > 0) {
+                const durationPerPart = duration / parts.length;
+                parts.forEach(part => {
+                    partDurationMap[part] = (partDurationMap[part] || 0) + durationPerPart;
+                });
+            }
+        });
+        
+        // 가장 시간이 긴 단일 부위 찾기
+        let topPartName = null;
+        let maxDuration = -1;
+        for (const part in partDurationMap) {
+            if (partDurationMap[part] > maxDuration) {
+                maxDuration = partDurationMap[part];
+                topPartName = part;
+            }
+        }
+        
+        const mostFrequentPart = topPartName ? { part: topPartName, count: Math.round(maxDuration) } : null;
+
+        // 2. 가장 많이 한 운동 이름 조회 (이 로직은 기존과 동일)
+        const exerciseResult = await pool.query(`
+            ${baseQuery}
+            SELECT e.name, SUM(w.duration_ms) as total_duration
+            FROM monthly_completed_workouts w
+            JOIN exercise e ON w.exercise_id = e.id
+            GROUP BY e.name
+            ORDER BY total_duration DESC
+            LIMIT 1;
+        `, [userId, firstDay, lastDay]);
+
+        const summary = {
+            mostFrequentPart: mostFrequentPart,
+            mostFrequentExercise: exerciseResult.rows[0] || null
+        };
+
+        res.json(summary);
+
+    } catch (error) {
+        console.error('❌ 월간 요약 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+// ✅ 기간별 레이더 차트 데이터 조회 API 
+app.get('/api/records/radar-data', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    const period = req.query.period;
+    if (isNaN(userId) || !period) {
+        return res.status(400).json({ message: 'userId와 period는 필수입니다.' });
+    }
+
+    try {
+        const now = new Date();
+        let startDate;
+
+        switch (period) {
+            case 'week':
+                startDate = new Date(new Date().setDate(now.getDate() - 7));
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                break;
+            case 'year':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                break;
+            case 'all':
+                startDate = new Date(0);
+                break;
+            default:
+                return res.status(400).json({ message: '잘못된 period 값입니다.' });
+        }
+        
+        const startDateString = startDate.toISOString().split('T')[0];
+
+        // 1. 시간 기반 운동의 운동량 조회
+        const timeResult = await pool.query(`
+            SELECT 
+                e.part,
+                -- ★★★ 밀리초(ms)는 60000으로 나누어 분으로 변환 ★★★
+                (t.elapsed_time_millis / 60000.0 * e.mets) as volume
+            FROM exercise_time t
+            JOIN exercise_schedule s ON t.schedule_id = s.id
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            JOIN exercise e ON t.exercise_id = e.id
+            WHERE p.user_id = $1 AND s.date >= $2 AND t.is_completed = true AND t.elapsed_time_millis > 0;
+        `, [userId, startDateString]);
+
+        // 2. 횟수 기반 운동의 운동량 조회
+        const repsResult = await pool.query(`
+            SELECT 
+                e.part,
+                -- ★★★ 초(s)는 60으로 나누어 분으로 변환 ★★★
+                (r.time_seconds / 60.0 * e.mets) as volume
+            FROM exercise_reps r
+            JOIN exercise_schedule s ON r.schedule_id = s.id
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            JOIN exercise e ON r.exercise_id = e.id
+            WHERE p.user_id = $1 AND s.date >= $2 AND r.is_completed = true AND r.time_seconds > 0;
+        `, [userId, startDateString]);
+
+        // 3. 서버에서 두 결과를 합산하고 부위별로 집계
+        const partVolumeMap = { "가슴": 0, "등": 0, "하체": 0, "어깨": 0, "팔": 0, "복근": 0, "유산소": 0 };
+        
+        const processRows = (rows) => {
+            rows.forEach(row => {
+                if (row.part in partVolumeMap) {
+                    partVolumeMap[row.part] += parseFloat(row.volume);
+                }
+            });
+        };
+
+        processRows(timeResult.rows);
+        processRows(repsResult.rows);
+
+        // 소수점 둘째 자리까지 반올림
+        for (const key in partVolumeMap) {
+            partVolumeMap[key] = parseFloat(partVolumeMap[key].toFixed(2));
+        }
+        
+        console.log(`[레이더 차트 데이터] 최종 집계:`, partVolumeMap);
+        res.json(partVolumeMap);
+
+    } catch (error) {
+        console.error('❌ 레이더 차트 데이터 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+
+// 사용자의 모든 신체 기록 가져오기
+app.get('/api/records/weight', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    if (isNaN(userId)) {
+        return res.status(400).json({ message: 'userId는 필수입니다.' });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT 
+                id, 
+                user_id,
+                to_char(date, 'YYYY-MM-DD') AS date, 
+                weight, 
+                body_fat_percentage, 
+                skeletal_muscle_mass 
+             FROM weight_records 
+             WHERE user_id = $1 
+             ORDER BY date ASC`,
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error('❌ 신체 기록 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+// 신체 기록 추가 또는 업데이트
+app.post('/api/records/weight', async (req, res) => {
+    const { userId, date, weight, bodyFatPercentage, skeletalMuscleMass } = req.body;
+    
+    if (!userId || !date || !weight) {
+        return res.status(400).json({ message: 'userId, date, weight는 필수입니다.' });
+    }
+
+    try {
+        // ON CONFLICT를 사용하여 날짜가 이미 존재하면 UPDATE, 없으면 INSERT 실행
+        const query = `
+            INSERT INTO weight_records (user_id, date, weight, body_fat_percentage, skeletal_muscle_mass)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                weight = EXCLUDED.weight,
+                body_fat_percentage = EXCLUDED.body_fat_percentage,
+                skeletal_muscle_mass = EXCLUDED.skeletal_muscle_mass;
+        `;
+        
+        await pool.query(query, [userId, date, weight, bodyFatPercentage, skeletalMuscleMass]);
+        res.status(201).json({ message: '신체 기록이 성공적으로 저장되었습니다.' });
+
+    } catch (error) {
+        console.error('❌ 신체 기록 저장 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
     }
 });
 
