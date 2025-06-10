@@ -1768,7 +1768,8 @@ app.post('/api/store/purchase', async (req, res) => {
             await client.query('ROLLBACK');
             return res.status(403).json({ success: false, message: `레벨 ${requiredLevel}이 필요합니다.` });
         }
-        if (user.coin < itemPrice) {
+        if (user.coin < itemPrice) { ///.
+          //커밋하려고 억지로 적은 주석.
             await client.query('ROLLBACK');
             return res.status(400).json({ success: false, message: '코인이 부족합니다.' });
         }
