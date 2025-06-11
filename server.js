@@ -43,30 +43,38 @@ router.post('/generate-routine', async (req, res) => {
   }
 
   const prompt = `
-당신은 퍼스널 트레이너입니다. 다음 정보를 참고하여 운동 루틴을 구성해 주세요.
-[사용자 정보]
-이름: ${user_info.name}
-나이대: ${user_info.age_group}
-성별: ${user_info.gender}
-키: ${user_info.height} cm
-몸무게: ${user_info.weight} kg
-지병: ${user_info.disease}
-운동 수준: ${user_info.exercise_level}
-선호 운동: ${user_info.preferred_exercises?.join(', ') || ''}
-운동 기구: ${user_info.exercise_equipment?.join(', ') || ''}
-
-[운동 계획 정보]
-운동 시작일: ${schedule_info.start_date}
-운동 종료일: ${schedule_info.end_date}
-운동 요일: ${schedule_info.days_of_week?.join(', ') || ''}
-강화 부위: ${schedule_info.focus_area}
-
-[요청 형식]
-- 운동명, 횟수, 세트수 포함
-- 예: "스쿼트" "20"회 "3"세트
-- 시간 표현 대신 횟수/세트로
-- 반드시 스트레칭으로 마무리
-`;
+  당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 참고하여 한국어로 하루치 운동 루틴을 구성해주세요.
+  
+  [사용자 정보]
+  이름: ${user_info.name}
+  연령대: ${user_info.age_group}
+  성별: ${user_info.gender}
+  키: ${user_info.height}cm
+  몸무게: ${user_info.weight}kg
+  질병 이력: ${user_info.disease}
+  운동 수준: ${user_info.exercise_level}
+  선호하는 운동: ${user_info.preferred_exercise?.join(', ') || '없음'}
+  운동 도구: ${user_info.exercise_equipment?.join(', ') || '없음'}
+  
+  [운동 계획 정보]
+  운동 시작일: ${schedule_info.start_date}
+  운동 종료일: ${schedule_info.end_date}
+  운동 요일: ${schedule_info.days_of_week?.join(', ') || '없음'}
+  강화 부위: ${schedule_info.focus_area}
+  
+  [요청 사항]
+  - 하루치 운동 루틴만 작성해 주세요.
+  - 반드시 아래 형식을 정확히 지켜 주세요:
+    1. 스쿼트 - 15회 3세트
+    2. 런지 - 12회 3세트
+    3. 레그 레이즈 - 10회 3세트
+  - 각 줄은 숫자로 시작하고, 운동 이름 다음엔 '-' 또는 ':' 를 사용해 주세요.
+  - 횟수는 '회', 세트 수는 '세트' 단위를 붙여 주세요.
+  - 타임이나 시간 기반 표현 없이, 횟수/세트만 사용해 주세요.
+  - 마지막엔 스트레칭으로 마무리해 주세요.
+  
+  이 형식을 반드시 지켜 주세요.
+  `;
 
   try {
     const completion = await openai.chat.completions.create({
