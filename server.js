@@ -94,6 +94,76 @@ router.post('/generate-routine', async (req, res) => {
   }
 });
 
+// GPT 운동 추천 생성 라우터
+router.post('/recommend-exercise', async (req, res) => {
+  const userId = req.body.userId;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId가 필요합니다.' });
+  }
+
+  try {
+    // 사용자 정보 가져오기
+    const userInfoResponse = await axios.get(`http://localhost:3000/api/user-info/${userId}`);
+    const userInfo = userInfoResponse.data;
+
+    // 운동 통계 정보 가져오기
+    const summaryResponse = await axios.get(`http://localhost:3000/api/records/monthly-summary`, {
+      params: { userId }
+    });
+    const summaryData = summaryResponse.data;
+
+    const mostPart = summaryData.mostFrequentPart?.part || '없음';
+    const leastPart = summaryData.leastFrequentPart?.part || '없음';
+
+    // GPT 프롬프트 구성
+    const prompt = `
+    당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 반영하여 추천 운동을 작성해 주세요.
+
+    [사용자 정보]
+    이름: ${userInfo.name}
+    가장 많이 한 운동 부위: ${mostPart}
+    가장 적게 한 운동 부위: ${leastPart}
+    성별: ${userInfo.gender}
+    키: ${userInfo.height} cm
+    몸무게: ${userInfo.weight} kg
+    지병/부상: ${userInfo.disease}
+    운동 수준: ${userInfo.exercise_level}
+    소유한 운동 기구: ${userInfo.exercise_equipment?.join(', ') || '없음'}
+
+    [요청 사항]
+    - 반드시 아래 형식을 정확히 지켜 주세요:
+    ${userInfo.name}님은
+    ${mostPart} 운동을 주로 하셨어요.
+    ${leastPart} 운동이 부족한 것 같아요.
+    다음에는 이런 운동 어떠신가요?
+
+    1. 덤벨 이두 컬 - 이두 강화
+    2. 버피 - 코어 안정성
+    3. 버드독 - 밸런스 및 허리 안정화
+
+    균형있는 운동은 건강한 몸을 만들어요.
+    새로운 운동에도 도전해 보세요!
+    `;
+
+    const gptResponse = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: '너는 퍼스널 트레이너 역할을 하는 AI야.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+    });
+
+    const result = gptResponse.choices[0].message.content?.trim() || '추천 생성 실패';
+    res.json({ recommendation: result });
+
+  } catch (error) {
+    console.error('❌ 추천 생성 실패:', error.response?.data || error.message);
+    res.status(500).json({ error: '추천 생성 실패' });
+  }
+});
+
 
 console.log("server.js 실제 실행됨 - 최상단 로그 확인"); 
 
@@ -475,6 +545,35 @@ app.post('/update-profile', async (req, res) => {
         console.error(error);
         res.status(500).send({ message: 'DB 업데이트 실패' });
     }
+});
+
+// 이메일로 사용자 식별, 프로필 정보 반환
+app.get('/get-profile', (req, res) => {
+    const email = req.query.email;
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = users.find(u => u.email === email);
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 반환할 프로필 데이터 구성
+    const profile = {
+        email: user.email,
+        name: user.name || '',
+        age_group: user.age_group || '',
+        gender: user.gender || '',
+        height: user.height || 0,
+        weight: user.weight || 0,
+        diseases: user.diseases || [],
+        workout_level: user.workout_level || '',
+        preferred_workouts: user.preferred_workouts || [],
+        equipment: user.equipment || []
+    };
+
+    res.json(profile);
 });
 
 // ✅ [로그인 기능 추가]
@@ -2110,6 +2209,17 @@ app.get('/api/records/monthly-summary', async (req, res) => {
         }
         
         const mostFrequentPart = topPartName ? { part: topPartName, count: Math.round(maxDuration) } : null;
+        
+        // 가장 적게 한 부위
+        let leastPartName = null;
+        let minDuration = Infinity;
+        for (const part in partDurationMap) {
+            if (partDurationMap[part] < minDuration) {
+                minDuration = partDurationMap[part];
+                leastPartName = part;
+            }
+        }
+        const leastFrequentPart = leastPartName ? { part: leastPartName, count: Math.round(minDuration) } : null;
 
         // 2. 가장 많이 한 운동 이름 조회 (이 로직은 기존과 동일)
         const exerciseResult = await pool.query(`
@@ -2124,6 +2234,7 @@ app.get('/api/records/monthly-summary', async (req, res) => {
 
         const summary = {
             mostFrequentPart: mostFrequentPart,
+            leastFrequentPart: leastFrequentPart,
             mostFrequentExercise: exerciseResult.rows[0] || null
         };
 
