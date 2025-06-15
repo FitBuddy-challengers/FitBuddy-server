@@ -5,9 +5,34 @@ const bodyParser = require('body-parser');
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
-
 const app = express();
 const port = 3000;
+
+// 사진 업로드 설정
+const multer = require('multer'); // 파일 업로드를 위한 multer 임포트
+const path = require('path');   // 파일 경로 관리를 위해 추가
+const fs = require('fs'); // ★ 파일 시스템 모듈 추가
+require('dotenv').config();
+
+const uploadDir = 'uploads/';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir);
+    console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
+}
+
+// 파일 업로드 설정
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir); // 설정된 디렉토리 사용
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+// 사진 업로드
+app.use('/uploads', express.static('uploads'));
 
 // 미들웨어 등록
 app.use(cors());
@@ -1317,7 +1342,7 @@ app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
       await client.query(
         `INSERT INTO exercise_reps (schedule_id, exercise_id, set_number, weight, reps, is_completed)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [scheduleId, exerciseId, set.set_number, set.weight, set.reps]
+        [scheduleId, exerciseId, set.set_number, set.weight, set.reps, set.is_completed] 
       );
     }
 
@@ -2385,6 +2410,95 @@ app.post('/api/records/weight', async (req, res) => {
 
     } catch (error) {
         console.error('❌ 신체 기록 저장 실패:', error);
+        res.status(500).json({ message: '서버 오류' });
+    }
+});
+
+app.post('/api/challenge/upload-photo', upload.single('photo'), async (req, res) => {
+    // Retrofit의 FieldNamingPolicy에 따라 snake_case로 전달됨
+    const { user_id, date } = req.body;
+    const userId = parseInt(user_id);
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null; // 서버에 저장된 파일 경로
+
+    console.log(`[사진 인증] userId: ${userId}, date: ${date}, file:`, req.file);
+
+    if (isNaN(userId) || !date || !imageUrl) {
+        return res.status(400).json({ success: false, message: '필수 정보가 누락되었습니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 기존에 해당 날짜에 인증한 내역이 있는지 확인
+        const existing = await client.query(
+            'SELECT id FROM photo_challenges WHERE user_id = $1 AND created_at = $2',
+            [userId, date]
+        );
+
+        if (existing.rows.length > 0) {
+            // 이미 존재하면 덮어쓰기 (또는 오류 반환)
+            await client.query(
+                'UPDATE photo_challenges SET image_url = $1 WHERE user_id = $2 AND created_at = $3',
+                [imageUrl, userId, date]
+            );
+            console.log(`[사진 인증 수정] userId: ${userId}, date: ${date}`);
+            // 이미 카운트되었으므로, 여기서는 카운트를 증가시키지 않음
+        } else {
+            // 새 인증 기록 삽입
+            await client.query(
+                'INSERT INTO photo_challenges (user_id, created_at, image_url) VALUES ($1, $2, $3)',
+                [userId, date, imageUrl]
+            );
+            // user_challenge_progress의 photo_count 증가
+            await client.query(
+                'UPDATE user_challenge_progress SET photo_count = photo_count + 1 WHERE user_id = $1',
+                [userId]
+            );
+            console.log(`[사진 인증 성공] userId: ${userId}, date: ${date}, photo_count 증가`);
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: '사진이 성공적으로 인증되었습니다.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('❌ 사진 인증 실패:', error);
+        res.status(500).json({ success: false, message: '서버 오류가 발생했습니다.' });
+    } finally {
+        client.release();
+    }
+});
+
+
+// ✅ 주간 사진 인증 목록 조회 API
+app.get('/api/challenge/weekly-photos', async (req, res) => {
+    const userId = parseInt(req.query.userId);
+    const startDate = req.query.startDate; // "YYYY-MM-DD" 형식의 일요일 날짜
+
+    if (isNaN(userId) || !startDate) {
+        return res.status(400).json({ message: "userId와 startDate는 필수입니다." });
+    }
+
+    try {
+        // startDate로부터 6일 뒤(토요일)까지의 데이터를 조회
+        const result = await pool.query(
+            `SELECT to_char(created_at, 'YYYY-MM-DD') as date, image_url 
+             FROM photo_challenges 
+             WHERE user_id = $1 AND created_at BETWEEN $2::date AND $2::date + 6`,
+            [userId, startDate]
+        );
+        
+        // 클라이언트 DTO 형식에 맞춰 키 이름 변경 (FieldNamingPolicy가 처리하므로 사실상 불필요)
+        const photoList = result.rows.map(row => ({
+            image_url: row.image_url,
+            date: row.date
+        }));
+
+        console.log(`[주간 사진 조회] userId: ${userId}, startDate: ${startDate}, 결과 수: ${photoList.length}`);
+        res.json(photoList);
+
+    } catch (error) {
+        console.error('❌ 주간 사진 조회 실패:', error);
         res.status(500).json({ message: '서버 오류' });
     }
 });
