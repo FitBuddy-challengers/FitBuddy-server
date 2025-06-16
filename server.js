@@ -421,6 +421,102 @@ router.get('/user-challenge-progress/:userId', async (req, res) => {
   }
 });
 
+// ✅ 챌린지 보상 지급 API
+router.post('/challenge/claim', async (req, res) => {
+  const { userId, challengeType } = req.body;
+
+  if (!userId || !challengeType) {
+    return res.status(400).json({ success: false, message: '사용자 ID와 챌린지 타입은 필수입니다.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. 현재 사용자 레벨 및 챌린지 진행도, 목표치 조회
+    const progressQuery = `
+      SELECT 
+        u.level, u.coin,
+        p.attendance_count, p.photo_count, p.exercise_count,
+        cl.required_attendance, cl.required_photo, cl.required_exercise,
+        cl.reward_attendance, cl.reward_photo, cl.reward_exercise
+      FROM users u
+      JOIN user_challenge_progress p ON u.id = p.user_id
+      JOIN challenge_level cl ON u.level = cl.level
+      WHERE u.id = $1 FOR UPDATE;
+    `;
+    const progressResult = await client.query(progressQuery, [userId]);
+
+    if (progressResult.rows.length === 0) {
+      throw new Error('사용자 또는 챌린지 정보를 찾을 수 없습니다.');
+    }
+
+    const data = progressResult.rows[0];
+    let requiredCount = 0;
+    let currentCount = 0;
+    let rewardAmount = 0;
+    let countColumn = '';
+
+    // 2. 요청된 챌린지 타입에 따라 변수 설정 및 완료 여부 검증
+    switch (challengeType) {
+      case 'attendance':
+        requiredCount = data.required_attendance;
+        currentCount = data.attendance_count;
+        rewardAmount = data.reward_attendance;
+        countColumn = 'attendance_count';
+        break;
+      case 'exercise':
+        requiredCount = data.required_exercise;
+        currentCount = data.exercise_count;
+        rewardAmount = data.reward_exercise;
+        countColumn = 'exercise_count';
+        break;
+      case 'photo':
+        requiredCount = data.required_photo;
+        currentCount = data.photo_count;
+        rewardAmount = data.reward_photo;
+        countColumn = 'photo_count';
+        break;
+      default:
+        throw new Error('알 수 없는 챌린지 타입입니다.');
+    }
+
+    if (currentCount < requiredCount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: '아직 챌린지 목표를 달성하지 못했습니다.' });
+    }
+
+    // 3. 보상 지급 및 챌린지 카운트 초기화
+    await client.query(`UPDATE users SET coin = coin + $1 WHERE id = $2`, [rewardAmount, userId]);
+    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = 0 WHERE user_id = $1`, [userId]);
+    
+    // ★★★ 수정된 부분: Log.d -> console.log ★★★
+    console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}`);
+    
+    // 4. 레벨업 확인
+    await checkAndUpdateLevel(userId);
+    
+    // 5. 변경된 사용자 정보 다시 조회
+    const finalUserResult = await client.query('SELECT coin, level FROM users WHERE id = $1', [userId]);
+    const finalUser = finalUserResult.rows[0];
+
+    await client.query('COMMIT');
+    res.status(200).json({ 
+        success: true, 
+        message: '보상을 획득했습니다!',
+        updatedCoin: finalUser.coin,
+        updatedLevel: finalUser.level
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ 챌린지 보상 지급 실패:', error);
+    res.status(500).json({ success: false, message: '서버 오류가 발생했습니다.' });
+  } finally {
+    client.release();
+  }
+});
+
 // ✅ 반드시 router 정의 후 app.use로 등록해야 함
 app.use('/api', router);
 
@@ -1305,6 +1401,7 @@ app.get('/api/reps-sets/:scheduleId', async (req, res) => {
   }
 });
 
+
 // ✅ REPS 세트 저장하기
 app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
   const scheduleId = parseInt(req.params.scheduleId, 10);
@@ -1321,7 +1418,7 @@ app.patch('/api/schedule/:scheduleId/reps-sets', async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1️⃣ 기존 세트 삭제
+    // 1️⃣ 기존 세트 삭제 
     await client.query("DELETE FROM exercise_reps WHERE schedule_id = $1", [scheduleId]);
     console.log("🗑 기존 세트 삭제 완료");
 
