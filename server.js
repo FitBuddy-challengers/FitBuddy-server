@@ -531,7 +531,6 @@ router.get('/user-challenge-progress/:userId', async (req, res) => {
   }
 });
 
-// ✅ 챌린지 보상 지급 API
 router.post('/challenge/claim', async (req, res) => {
   const { userId, challengeType } = req.body;
 
@@ -596,15 +595,17 @@ router.post('/challenge/claim', async (req, res) => {
       return res.status(400).json({ success: false, message: '아직 챌린지 목표를 달성하지 못했습니다.' });
     }
 
-    // 3. 보상 지급 및 챌린지 카운트 초기화
+    // 3. 보상 지급 및 챌린지 카운트 수정
     await client.query(`UPDATE users SET coin = coin + $1 WHERE id = $2`, [rewardAmount, userId]);
-    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = 0 WHERE user_id = $1`, [userId]);
     
-    // ★★★ 수정된 부분: Log.d -> console.log ★★★
-    console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}`);
+    // ★★★ 핵심 수정: 0으로 초기화하는 대신, 달성한 만큼만 차감 ★★★
+    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
     
+    console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}, count updated.`);
+    
+    // ★★★ 수정: client 인자 전달 ★★★
     // 4. 레벨업 확인
-    await checkAndUpdateLevel(userId);
+    await checkAndUpdateLevel(client, userId);
     
     // 5. 변경된 사용자 정보 다시 조회
     const finalUserResult = await client.query('SELECT coin, level FROM users WHERE id = $1', [userId]);
@@ -626,6 +627,7 @@ router.post('/challenge/claim', async (req, res) => {
     client.release();
   }
 });
+
 
 // ✅ 반드시 router 정의 후 app.use로 등록해야 함
 app.use('/api', router);
