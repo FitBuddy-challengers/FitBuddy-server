@@ -634,10 +634,10 @@ router.post('/challenge/claim', async (req, res) => {
     client.release();
   }
 });
-
-// ✅ 월간 운동 완료 기록 조회 API (n일째 운동 중 기능용)
+// ✅ 월간 사진 인증 기록 조회 API (n일째 운동 중 기능용)
+// 기존 /challenge/monthly-records API의 로직을 수정합니다.
 router.get('/challenge/monthly-records', async (req, res) => {
-    // 1. 쿼리 파라미터에서 userId, year, month 추출 및 검증
+    // 1. 쿼리 파라미터에서 userId, year, month 추출 및 검증 (기존과 동일)
     const userId = parseInt(req.query.userId, 10);
     const year = parseInt(req.query.year, 10);
     const month = parseInt(req.query.month, 10);
@@ -647,33 +647,28 @@ router.get('/challenge/monthly-records', async (req, res) => {
     }
 
     try {
-        // 2. 조회할 월의 시작일과 마지막일 계산
-        // JavaScript의 Date 객체에서 월(month)은 0부터 시작하므로, 클라이언트에서 6월을 '6'으로 보내면 '5'로 계산해야 합니다.
-        const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-        const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // 해당 월의 마지막 날짜
+        console.log(`[월간 사진인증일 조회] userId: ${userId}, 기간: ${year}년 ${month}월`);
 
-        console.log(`[월간 운동기록 조회] userId: ${userId}, 기간: ${startDate} ~ ${endDate}`);
-
-        // 3. DB 쿼리 실행
-        // exercise_plan과 exercise_schedule을 조인하여 특정 사용자가 특정 기간 동안 '완료(is_completed=true)'한
-        // 운동 기록이 있는 날짜를 중복 없이(DISTINCT) 조회합니다.
+        // ★★★ SQL 쿼리 수정 ★★★
+        // exercise_schedule 테이블 대신 photo_challenges 테이블을 조회하여
+        // 해당 월에 사진을 올린 날짜 목록을 중복 없이 가져옵니다.
         const result = await pool.query(`
-            SELECT DISTINCT to_char(s.date, 'YYYY-MM-DD') as date
-            FROM exercise_schedule s
-            JOIN exercise_plan p ON s.exercise_plan_id = p.id
-            WHERE p.user_id = $1
-              AND s.is_completed = true
-              AND s.date BETWEEN $2 AND $3
+            SELECT DISTINCT to_char(created_at, 'YYYY-MM-DD') as date
+            FROM photo_challenges
+            WHERE user_id = $1
+              AND EXTRACT(YEAR FROM created_at) = $2
+              AND EXTRACT(MONTH FROM created_at) = $3
             ORDER BY date ASC;
-        `, [userId, startDate, endDate]);
+        `, [userId, year, month]);
 
         // 4. 조회 결과 반환
         // 결과는 [{ "date": "2025-06-01" }, { "date": "2025-06-03" }] 와 같은 형식의 배열이 됩니다.
-        console.log(`[월간 운동기록 조회] userId: ${userId}, ${year}년 ${month}월 운동 완료일 ${result.rows.length}개 반환`);
+        // 클라이언트는 이 배열의 크기(result.rows.length)를 사용하여 "n일째 운동 중"을 표시합니다.
+        console.log(`[월간 사진인증일 조회] userId: ${userId}, ${year}년 ${month}월 운동 완료일 ${result.rows.length}개 반환`);
         res.status(200).json(result.rows);
 
     } catch (error) {
-        console.error('❌ 월간 운동 완료 기록 조회 실패:', error);
+        console.error('❌ 월간 사진 인증 기록 조회 실패:', error);
         res.status(500).json({ message: '서버 오류가 발생했습니다.' });
     }
 });
@@ -2062,9 +2057,8 @@ async function checkAndUpdateLevel(client, userId) {
         console.error(`❌ checkAndUpdateLevel 함수 실행 중 오류 발생 (userId: ${userId}):`, error);
         throw error; 
     }
-}
+} 
 
-// 출석 1회 기록 로직 (user_attendance 없이 처리)
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
 app.post('/api/challenge/attendance/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
