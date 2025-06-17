@@ -596,15 +596,22 @@ router.post('/challenge/claim', async (req, res) => {
     }
 
     // 3. 보상 지급 및 챌린지 카운트 수정
+    // 3. 보상 지급 및 챌린지 카운트 수정
     await client.query(`UPDATE users SET coin = coin + $1 WHERE id = $2`, [rewardAmount, userId]);
     
+    // ★★★ 핵심 수정: 0으로 초기화하는 대신, 달성한 만큼만 차감 ★★★
+    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
     // ★★★ 핵심 수정: 0으로 초기화하는 대신, 달성한 만큼만 차감 ★★★
     await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
     
     console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}, count updated.`);
     
     // ★★★ 수정: client 인자 전달 ★★★
+    console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}, count updated.`);
+    
+    // ★★★ 수정: client 인자 전달 ★★★
     // 4. 레벨업 확인
+    await checkAndUpdateLevel(client, userId);
     await checkAndUpdateLevel(client, userId);
     
     // 5. 변경된 사용자 정보 다시 조회
