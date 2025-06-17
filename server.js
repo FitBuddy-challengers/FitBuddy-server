@@ -119,6 +119,113 @@ router.post('/generate-routine', async (req, res) => {
   }
 });
 
+
+// ★★★ 1. 사용자 정보 조회를 위한 재사용 가능 함수 ★★★
+async function getUserInfo(userId) {
+    if (isNaN(userId)) {
+        throw new Error("유효하지 않은 사용자 ID입니다.");
+    }
+    const result = await pool.query(`
+        SELECT name, age_group, gender, height, weight, diseases, workout_level, preferred_workouts, equipment
+        FROM users
+        WHERE id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+        throw new Error("사용자를 찾을 수 없습니다.");
+    }
+    const row = result.rows[0];
+    return {
+        name: row.name,
+        age_group: row.age_group,
+        gender: row.gender,
+        height: row.height,
+        weight: row.weight,
+        disease: row.diseases,
+        exercise_level: row.workout_level,
+        preferred_exercises: (row.preferred_workouts || '').split(','),
+        exercise_equipment: (row.equipment || '').split(','),
+    };
+}
+
+// ★★★ 2. 월간 요약 정보 조회를 위한 재사용 가능 함수 ★★★
+async function getMonthlySummary(userId) {
+    if (isNaN(userId)) {
+        throw new Error("유효하지 않은 사용자 ID입니다.");
+    }
+    const date = new Date();
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const baseQuery = `
+        WITH monthly_completed_workouts AS (
+            SELECT 
+                s.exercise_id, (r.time_seconds * 1000) AS duration_ms
+            FROM exercise_schedule s
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            JOIN exercise_reps r ON s.id = r.schedule_id
+            WHERE p.user_id = $1 AND s.date BETWEEN $2 AND $3 AND r.is_completed = true AND r.time_seconds > 0
+            UNION ALL
+            SELECT 
+                s.exercise_id, t.elapsed_time_millis AS duration_ms
+            FROM exercise_schedule s
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            JOIN exercise_time t ON s.id = t.schedule_id
+            WHERE p.user_id = $1 AND s.date BETWEEN $2 AND $3 AND t.is_completed = true AND t.elapsed_time_millis > 0
+        )
+    `;
+    const allWorkoutsResult = await pool.query(`
+        ${baseQuery}
+        SELECT e.part, w.duration_ms
+        FROM monthly_completed_workouts w
+        JOIN exercise e ON w.exercise_id = e.id;
+    `, [userId, firstDay, lastDay]);
+    
+    const partDurationMap = {};
+    allWorkoutsResult.rows.forEach(row => {
+        const parts = (row.part || '').split(',').map(p => p.trim());
+        const duration = parseFloat(row.duration_ms);
+        if (parts.length > 0 && duration > 0) {
+            const durationPerPart = duration / parts.length;
+            parts.forEach(part => {
+                if(part) partDurationMap[part] = (partDurationMap[part] || 0) + durationPerPart;
+            });
+        }
+    });
+
+    let topPartName = null, maxDuration = -1;
+    for (const part in partDurationMap) {
+        if (partDurationMap[part] > maxDuration) {
+            maxDuration = partDurationMap[part];
+            topPartName = part;
+        }
+    }
+    const mostFrequentPart = topPartName ? { part: topPartName, count: Math.round(maxDuration) } : null;
+
+    let leastPartName = null, minDuration = Infinity;
+    for (const part in partDurationMap) {
+        if (partDurationMap[part] < minDuration) {
+            minDuration = partDurationMap[part];
+            leastPartName = part;
+        }
+    }
+    const leastFrequentPart = leastPartName ? { part: leastPartName, count: Math.round(minDuration) } : null;
+
+    const exerciseResult = await pool.query(`
+        ${baseQuery}
+        SELECT e.name, SUM(w.duration_ms) as total_duration
+        FROM monthly_completed_workouts w
+        JOIN exercise e ON w.exercise_id = e.id
+        GROUP BY e.name ORDER BY total_duration DESC LIMIT 1;
+    `, [userId, firstDay, lastDay]);
+
+    return {
+        mostFrequentPart: mostFrequentPart,
+        leastFrequentPart: leastFrequentPart,
+        mostFrequentExercise: exerciseResult.rows[0] || null
+    };
+}
+
 // GPT 운동 추천 생성 라우터
 router.post('/recommend-exercise', async (req, res) => {
   const userId = req.body.userId;
@@ -128,15 +235,17 @@ router.post('/recommend-exercise', async (req, res) => {
   }
 
   try {
-    // 사용자 정보 가져오기
-    const userInfoResponse = await axios.get(`http://localhost:3000/api/user-info/${userId}`);
-    const userInfo = userInfoResponse.data;
+    const userInfo = await getUserInfo(parseInt(userId));
+    const summaryData = await getMonthlySummary(parseInt(userId));
+    // // 사용자 정보 가져오기
+    // const userInfoResponse = await axios.get(`http://localhost:3000/api/user-info/${userId}`);
+    // const userInfo = userInfoResponse.data;
 
-    // 운동 통계 정보 가져오기
-    const summaryResponse = await axios.get(`http://localhost:3000/api/records/monthly-summary`, {
-      params: { userId }
-    });
-    const summaryData = summaryResponse.data;
+    // // 운동 통계 정보 가져오기
+    // const summaryResponse = await axios.get(`http://localhost:3000/api/records/monthly-summary`, {
+    //   params: { userId }
+    // });
+    // const summaryData = summaryResponse.data;
 
     const mostPart = summaryData.mostFrequentPart?.part || '없음';
     const leastPart = summaryData.leastFrequentPart?.part || '없음';
@@ -171,23 +280,25 @@ router.post('/recommend-exercise', async (req, res) => {
     새로운 운동에도 도전해 보세요!
     `;
 
-    const gptResponse = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: '너는 퍼스널 트레이너 역할을 하는 AI야.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-    });
+ // 실제 GPT 호출 로직 
+        const gptResponse = await openai.chat.completions.create({
+             model: 'gpt-3.5-turbo',
+             messages: [
+               { role: 'system', content: '너는 퍼스널 트레이너 역할을 하는 AI야.' },
+               { role: 'user', content: prompt },
+             ],
+             temperature: 0.7,
+        });
+        const result = gptResponse.choices[0].message.content?.trim() || '추천 생성 실패';
+        console.log(`[추천 생성] GPT로부터 응답 받음. userId: ${userId}`);
+        res.json({ recommendation: result });
 
-    const result = gptResponse.choices[0].message.content?.trim() || '추천 생성 실패';
-    res.json({ recommendation: result });
-
-  } catch (error) {
-    console.error('❌ 추천 생성 실패:', error.response?.data || error.message);
-    res.status(500).json({ error: '추천 생성 실패' });
-  }
+    } catch (error) {
+        console.error('❌ 추천 생성 실패:', error.message);
+        res.status(500).json({ error: '추천 생성 중 서버 오류가 발생했습니다.' });
+    }
 });
+
 
 
 console.log("server.js 실제 실행됨 - 최상단 로그 확인"); 
@@ -197,7 +308,6 @@ console.log("server.js 실제 실행됨 - 최상단 로그 확인");
 
 //app.use(bodyParser.json());
 
-// ✅ 여기 추가하세요
 router.get('/user-info/:userId', async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
   try {
@@ -2368,7 +2478,7 @@ app.get('/api/records/monthly-summary', async (req, res) => {
     }
 });
 
-// ✅ 기간별 레이더 차트 데이터 조회 API 
+// ★★★ 수정된 레이더 차트 데이터 조회 API ★★★
 app.get('/api/records/radar-data', async (req, res) => {
     const userId = parseInt(req.query.userId, 10);
     const period = req.query.period;
@@ -2391,7 +2501,7 @@ app.get('/api/records/radar-data', async (req, res) => {
                 startDate = new Date(now.getFullYear(), 0, 1);
                 break;
             case 'all':
-                startDate = new Date(0);
+                startDate = new Date(0); // 1970-01-01, 모든 기간
                 break;
             default:
                 return res.status(400).json({ message: '잘못된 period 값입니다.' });
@@ -2403,7 +2513,6 @@ app.get('/api/records/radar-data', async (req, res) => {
         const timeResult = await pool.query(`
             SELECT 
                 e.part,
-                -- ★★★ 밀리초(ms)는 60000으로 나누어 분으로 변환 ★★★
                 (t.elapsed_time_millis / 60000.0 * e.mets) as volume
             FROM exercise_time t
             JOIN exercise_schedule s ON t.schedule_id = s.id
@@ -2416,7 +2525,6 @@ app.get('/api/records/radar-data', async (req, res) => {
         const repsResult = await pool.query(`
             SELECT 
                 e.part,
-                -- ★★★ 초(s)는 60으로 나누어 분으로 변환 ★★★
                 (r.time_seconds / 60.0 * e.mets) as volume
             FROM exercise_reps r
             JOIN exercise_schedule s ON r.schedule_id = s.id
@@ -2430,8 +2538,18 @@ app.get('/api/records/radar-data', async (req, res) => {
         
         const processRows = (rows) => {
             rows.forEach(row => {
-                if (row.part in partVolumeMap) {
-                    partVolumeMap[row.part] += parseFloat(row.volume);
+                // ★★★ 핵심 수정: '가슴, 팔'과 같은 문자열을 분리 ★★★
+                const parts = (row.part || '').split(',').map(p => p.trim());
+                const volume = parseFloat(row.volume);
+
+                if (parts.length > 0 && volume > 0) {
+                    const volumePerPart = volume / parts.length; // 운동량을 부위별로 분배
+                    parts.forEach(part => {
+                        // 유효한 부위인지 확인 후, 운동량 누적
+                        if (part in partVolumeMap) {
+                            partVolumeMap[part] += volumePerPart;
+                        }
+                    });
                 }
             });
         };
@@ -2452,7 +2570,6 @@ app.get('/api/records/radar-data', async (req, res) => {
         res.status(500).json({ message: '서버 오류' });
     }
 });
-
 
 // 사용자의 모든 신체 기록 가져오기
 app.get('/api/records/weight', async (req, res) => {
