@@ -628,6 +628,49 @@ router.post('/challenge/claim', async (req, res) => {
   }
 });
 
+// ✅ 월간 운동 완료 기록 조회 API (n일째 운동 중 기능용)
+router.get('/challenge/monthly-records', async (req, res) => {
+    // 1. 쿼리 파라미터에서 userId, year, month 추출 및 검증
+    const userId = parseInt(req.query.userId, 10);
+    const year = parseInt(req.query.year, 10);
+    const month = parseInt(req.query.month, 10);
+
+    if (isNaN(userId) || isNaN(year) || isNaN(month)) {
+        return res.status(400).json({ message: 'userId, year, month는 필수이며 숫자 형식이어야 합니다.' });
+    }
+
+    try {
+        // 2. 조회할 월의 시작일과 마지막일 계산
+        // JavaScript의 Date 객체에서 월(month)은 0부터 시작하므로, 클라이언트에서 6월을 '6'으로 보내면 '5'로 계산해야 합니다.
+        const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // 해당 월의 마지막 날짜
+
+        console.log(`[월간 운동기록 조회] userId: ${userId}, 기간: ${startDate} ~ ${endDate}`);
+
+        // 3. DB 쿼리 실행
+        // exercise_plan과 exercise_schedule을 조인하여 특정 사용자가 특정 기간 동안 '완료(is_completed=true)'한
+        // 운동 기록이 있는 날짜를 중복 없이(DISTINCT) 조회합니다.
+        const result = await pool.query(`
+            SELECT DISTINCT to_char(s.date, 'YYYY-MM-DD') as date
+            FROM exercise_schedule s
+            JOIN exercise_plan p ON s.exercise_plan_id = p.id
+            WHERE p.user_id = $1
+              AND s.is_completed = true
+              AND s.date BETWEEN $2 AND $3
+            ORDER BY date ASC;
+        `, [userId, startDate, endDate]);
+
+        // 4. 조회 결과 반환
+        // 결과는 [{ "date": "2025-06-01" }, { "date": "2025-06-03" }] 와 같은 형식의 배열이 됩니다.
+        console.log(`[월간 운동기록 조회] userId: ${userId}, ${year}년 ${month}월 운동 완료일 ${result.rows.length}개 반환`);
+        res.status(200).json(result.rows);
+
+    } catch (error) {
+        console.error('❌ 월간 운동 완료 기록 조회 실패:', error);
+        res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+    }
+});
+
 
 // ✅ 반드시 router 정의 후 app.use로 등록해야 함
 app.use('/api', router);
@@ -1963,35 +2006,57 @@ app.get('/api/user-challenge-progress/:userId', async (req, res) => {
 
 //서버에서 자동 레벨업 처리
 //user_challenge_progress와 challenge_level를 비교하여 자동 레벨업
-async function checkAndUpdateLevel(userId) {
-  const progress = await pool.query(`
-      SELECT attendance_count, photo_count, exercise_count
-      FROM user_challenge_progress
-      WHERE user_id = $1
-  `, [userId]);
+// ★★★ 수정된 checkAndUpdateLevel 함수 ★★★
+async function checkAndUpdateLevel(client, userId) {
+    try {
+        console.log(`[레벨업 확인] userId: ${userId}에 대한 레벨업 검사를 시작합니다.`);
+        
+        // SQL 쿼리문 내부에 있던 주석을 모두 제거했습니다.
+        const progressResult = await client.query(`
+            SELECT attendance_count, photo_count, exercise_count
+            FROM user_challenge_progress
+            WHERE user_id = $1
+        `, [userId]);
 
-  const user = await pool.query(`SELECT level FROM users WHERE id = $1`, [userId]);
-  const currentLevel = user.rows[0].level;
+        const userResult = await client.query(`SELECT level FROM users WHERE id = $1`, [userId]);
+        
+        if (userResult.rows.length === 0 || progressResult.rows.length === 0) {
+            console.warn(`[레벨업 확인] userId: ${userId}의 사용자 또는 진행도 정보가 없어 건너뜁니다.`);
+            return;
+        }
 
-  // 다음 레벨 조건 가져오기
-  const nextLevel = currentLevel + 1;
-  const nextLevelReq = await pool.query(`
-      SELECT * FROM challenge_level WHERE level = $1
-  `, [nextLevel]);
+        const currentLevel = userResult.rows[0].level;
+        const progress = progressResult.rows[0];
 
-  if (nextLevelReq.rowCount === 0) return; // 더 이상 레벨 없음
+        const nextLevel = currentLevel + 1;
+        const nextLevelReqResult = await client.query(`
+            SELECT required_attendance, required_photo, required_exercise 
+            FROM challenge_level WHERE level = $1
+        `, [nextLevel]);
 
-  const required = nextLevelReq.rows[0];
+        if (nextLevelReqResult.rowCount === 0) {
+            console.log(`[레벨업 확인] userId: ${userId}는 이미 최고 레벨입니다.`);
+            return; 
+        }
 
-  if (
-      progress.rows[0].attendance_count >= required.required_attendance &&
-      progress.rows[0].photo_count >= required.required_photo &&
-      progress.rows[0].exercise_count >= required.required_exercise
-  ) {
-      // ✅ 레벨업 실행
-      await pool.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
-  }
+        const required = nextLevelReqResult.rows[0];
+
+        if (
+            progress.attendance_count >= required.required_attendance &&
+            progress.photo_count >= required.required_photo &&
+            progress.exercise_count >= required.required_exercise
+        ) {
+            await client.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
+            console.log(`[레벨업!] userId: ${userId}, level: ${currentLevel} -> ${nextLevel}로 레벨업했습니다.`);
+        } else {
+            console.log(`[레벨업 확인] userId: ${userId}는 아직 레벨업 조건을 충족하지 못했습니다.`);
+        }
+    } catch (error) {
+        console.error(`❌ checkAndUpdateLevel 함수 실행 중 오류 발생 (userId: ${userId}):`, error);
+        throw error; 
+    }
 }
+
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
 app.post('/api/challenge/attendance/:userId', async (req, res) => {
