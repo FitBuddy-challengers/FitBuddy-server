@@ -1,0 +1,20 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Environment
+.env
+
+# Logs
+logs/
+*.log
+
+# Uploads
+uploads/
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
