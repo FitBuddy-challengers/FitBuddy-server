@@ -1,0 +1,1003 @@
+openapi: 3.1.0
+info:
+  title: FitBuddy API
+  version: "1.0.0"
+  description: |
+    Auth, Challenge, Exercise/Plan/Schedule, Records, GPT 루틴, 세트 관리 등 엔드포인트 문서.
+    이 파일이 존재하면 swagger.js가 이 스펙을 사용합니다.
+
+servers:
+  - url: https://fitbuddy-server-p6r6.onrender.com
+    description: Production
+  - url: http://localhost:3000
+    description: Local
+
+tags:
+  - name: Auth
+  - name: Profile
+  - name: User
+  - name: Challenge
+  - name: Photos
+  - name: Records
+  - name: Exercises
+  - name: Plans & Schedules
+  - name: Sets
+  - name: GPT
+
+components:
+  schemas:
+    ApiMessage:
+      type: object
+      properties:
+        message:
+          type: string
+    SignupRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    SendOtpRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    VerifyOtpRequest:
+      type: object
+      required: [email, otp]
+      properties:
+        email: { type: string, format: email }
+        otp: { type: string, description: "6자리 숫자 문자열" }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    UpdateProfileRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        age_group: { type: string }
+        gender: { type: string }
+        height: { type: number }
+        weight: { type: number }
+        diseases:
+          type: array
+          items: { type: string }
+        workout_level: { type: string }
+        preferred_workouts:
+          type: array
+          items: { type: string }
+        equipment:
+          type: array
+          items: { type: string }
+    UserProfile:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        age_group: { type: string }
+        gender: { type: string }
+        height: { type: number }
+        weight: { type: number }
+        diseases:
+          type: array
+          items: { type: string }
+        workout_level: { type: string }
+        preferred_workouts:
+          type: array
+          items: { type: string }
+        equipment:
+          type: array
+          items: { type: string }
+    UserInfoById:
+      type: object
+      properties:
+        name: { type: string }
+        age_group: { type: string }
+        gender: { type: string }
+        height: { type: number }
+        weight: { type: number }
+        disease: { type: string }
+        exercise_level: { type: string }
+        preferred_exercises:
+          type: array
+          items: { type: string }
+        exercise_equipment:
+          type: array
+          items: { type: string }
+    ChallengeLevel:
+      type: object
+      properties:
+        level: { type: integer }
+        required_attendance: { type: integer }
+        required_photo: { type: integer }
+        required_exercise: { type: integer }
+        reward_attendance: { type: integer }
+        reward_photo: { type: integer }
+        reward_exercise: { type: integer }
+    UserChallengeProgress:
+      type: object
+      properties:
+        user_id: { type: integer }
+        level: { type: integer }
+        coin: { type: integer }
+        counts:
+          type: object
+          properties:
+            attendance: { type: integer }
+            photo: { type: integer }
+            exercise: { type: integer }
+        required:
+          type: object
+          properties:
+            attendance: { type: integer }
+            photo: { type: integer }
+            exercise: { type: integer }
+        progress_percent:
+          type: object
+          properties:
+            attendance: { type: integer }
+            photo: { type: integer }
+            exercise: { type: integer }
+        last_attendance_date: { type: string, nullable: true }
+    ClaimRequest:
+      type: object
+      required: [userId, challengeType]
+      properties:
+        userId: { type: integer }
+        challengeType:
+          type: string
+          enum: [attendance, exercise, photo]
+    ClaimResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        updatedCoin: { type: integer }
+        updatedLevel: { type: integer }
+    UploadPhotoResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+    WeeklyPhoto:
+      type: object
+      properties:
+        image_url: { type: string }
+        date: { type: string, format: date }
+    MonthlyCompletion:
+      type: object
+      properties:
+        date: { type: string }
+        completion_rate: { type: integer, description: "0~100" }
+    DailyRecordItem:
+      type: object
+      properties:
+        exercise_name: { type: string }
+        reps: { type: integer, nullable: true }
+        sets: { type: integer }
+        seconds: { type: integer, nullable: true }
+        is_completed: { type: boolean }
+        is_time_type: { type: boolean }
+    MonthlySummary:
+      type: object
+      properties:
+        mostFrequentPart:
+          type: object
+          nullable: true
+          properties:
+            part: { type: string }
+            count: { type: integer }
+        leastFrequentPart:
+          type: object
+          nullable: true
+          properties:
+            part: { type: string }
+            count: { type: integer }
+        mostFrequentExercise:
+          type: object
+          nullable: true
+          properties:
+            name: { type: string }
+            total_duration: { type: string }
+    RadarData:
+      type: object
+      description: "부위별 볼륨 맵"
+      additionalProperties:
+        type: number
+    WeightRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        date: { type: string }
+        weight: { type: number }
+        body_fat_percentage: { type: number, nullable: true }
+        skeletal_muscle_mass: { type: number, nullable: true }
+    WeightUpsertRequest:
+      type: object
+      required: [userId, date, weight]
+      properties:
+        userId: { type: integer }
+        date: { type: string, format: date }
+        weight: { type: number }
+        bodyFatPercentage: { type: number, nullable: true }
+        skeletalMuscleMass: { type: number, nullable: true }
+    Exercise:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        part: { type: string }
+        equip: { type: string }
+        image_path: { type: string }
+        mets: { type: number }
+        is_time_type: { type: boolean }
+        is_noise: { type: boolean }
+        is_favorite: { type: boolean }
+        is_hidden: { type: boolean }
+    FavoriteToggleRequest:
+      type: object
+      required: [isFavorite]
+      properties:
+        isFavorite: { type: boolean }
+    HiddenToggleRequest:
+      type: object
+      required: [isHidden]
+      properties:
+        isHidden: { type: boolean }
+    CreateDummyPlanRequest:
+      type: object
+      required: [user_id, date]
+      properties:
+        user_id: { type: integer }
+        date: { type: string, format: date }
+    CreateDummyPlanResponse:
+      type: object
+      properties:
+        message: { type: string }
+        planId: { type: integer }
+        date: { type: string }
+    TodayPlanResponse:
+      type: object
+      properties:
+        plan:
+          type: object
+        schedules:
+          type: array
+          items:
+            type: object
+    AddScheduleRequest:
+      type: object
+      required: [planId, date]
+      properties:
+        planId: { type: integer }
+        date: { type: string, format: date }
+        exerciseOrder: { type: integer, nullable: true }
+        exercise_id: { type: integer, nullable: true }
+        exerciseId: { type: integer, nullable: true }
+    ChangeExerciseRequest:
+      type: object
+      required: [newExerciseId]
+      properties:
+        newExerciseId: { type: integer }
+    ReorderQuery:
+      type: object
+      properties:
+        order: { type: integer }
+    CompleteScheduleResponse:
+      type: object
+      properties:
+        message: { type: string }
+    RepsSet:
+      type: object
+      required: [set_number, reps, weight, is_completed]
+      properties:
+        set_number: { type: integer }
+        reps: { type: integer }
+        weight: { type: number }
+        is_completed: { type: boolean }
+    TimeSet:
+      type: object
+      required: [set_number, seconds]
+      properties:
+        set_number: { type: integer }
+        seconds: { type: integer, description: "초 단위" }
+        weight: { type: number, nullable: true }
+    RepsCompleteRequest:
+      type: object
+      required: [scheduleId, setNumber, isCompleted]
+      properties:
+        scheduleId: { type: integer }
+        setNumber: { type: integer }
+        isCompleted: { type: boolean }
+        time_seconds: { type: integer, nullable: true }
+    GenerateRoutineRequest:
+      type: object
+      required: [user_info, schedule_info]
+      properties:
+        user_info:
+          type: object
+          properties:
+            name: { type: string }
+            age_group: { type: string }
+            gender: { type: string }
+            height: { type: number }
+            weight: { type: number }
+            disease: { type: string }
+            exercise_level: { type: string }
+            preferred_exercise:
+              type: array
+              items: { type: string }
+            exercise_equipment:
+              type: array
+              items: { type: string }
+        schedule_info:
+          type: object
+          properties:
+            start_date: { type: string, format: date }
+            end_date: { type: string, format: date }
+            days_of_week:
+              type: array
+              items: { type: string }
+            focus_area: { type: string }
+    GenerateRoutineResponse:
+      type: object
+      properties:
+        plan_text: { type: string }
+    RecommendExerciseRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: integer }
+
+paths:
+  /signup:
+    post:
+      tags: [Auth]
+      summary: 회원가입 정보 임시 저장
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignupRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+
+  /send-otp:
+    post:
+      tags: [Auth]
+      summary: 이메일로 OTP 전송
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendOtpRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "400": { description: 잘못된 이메일 }
+        "500": { description: 전송 실패 }
+
+  /verify-otp:
+    post:
+      tags: [Auth]
+      summary: OTP 검증 후 DB 저장
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyOtpRequest' }
+      responses:
+        "200": { description: 가입/이미 인증 완료, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "400": { description: 불일치/만료 또는 사전정보 없음 }
+        "500": { description: DB 오류 }
+
+  /update-profile:
+    post:
+      tags: [Profile]
+      summary: 사용자 프로필 업데이트(이메일 기준)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        "200": { description: 저장 완료, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "404": { description: 사용자 없음 }
+        "500": { description: DB 실패 }
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: 로그인(이메일/패스워드)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        "200": { description: 로그인 성공, content: { application/json: { schema: { type: object, properties: { message: {type: string}, user: { type: object }}}}}}
+        "401": { description: 불일치 }
+        "500": { description: 서버 오류 }
+
+  /get-profile:
+    get:
+      tags: [Profile]
+      summary: 이메일로 프로필 조회
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserProfile' }}}}
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/user-info/{userId}:
+    get:
+      tags: [User]
+      summary: userId로 사용자 정보 조회
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserInfoById' }}}}
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/challenge-levels:
+    get:
+      tags: [Challenge]
+      summary: 챌린지 레벨 요구치/보상 목록
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ChallengeLevel' }}}}}
+        "500": { description: 서버 오류 }
+
+  /api/user-challenge-progress/{userId}:
+    get:
+      tags: [Challenge]
+      summary: 사용자 챌린지 진행도/퍼센트/코인
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserChallengeProgress' }}}}
+        "400": { description: 잘못된 userId }
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/challenge/attendance/{userId}:
+    post:
+      tags: [Challenge]
+      summary: 출석 1회 기록(하루 1회)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: 처리 완료, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "404": { description: 진행도 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/challenge/exercise/{userId}:
+    post:
+      tags: [Challenge]
+      summary: 운동 1회 기록(해당일 완료시)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: 처리 완료, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "500": { description: 서버 오류 }
+
+  /challenge/claim:
+    post:
+      tags: [Challenge]
+      summary: 챌린지 보상 수령 (구 경로)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClaimResponse' }}}}
+        "400": { description: 미달성 }
+        "500": { description: 오류 }
+
+  /api/challenge/claim:
+    post:
+      tags: [Challenge]
+      summary: 챌린지 보상 수령 (api 별칭)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClaimResponse' }}}}
+        "400": { description: 미달성 }
+        "500": { description: 오류 }
+
+  /challenge/monthly-records:
+    get:
+      tags: [Photos]
+      summary: 월 단위 사진 인증일 목록(YYYY-MM-DD)
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: month
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 12 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object, properties: { date: { type: string }}}}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/challenge/upload-photo:
+    post:
+      tags: [Photos]
+      summary: 사진 인증 업로드(필드명 photo)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [user_id, date, photo]
+              properties:
+                user_id: { type: integer }
+                date: { type: string, format: date }
+                photo:
+                  type: string
+                  format: binary
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UploadPhotoResponse' }}}}
+        "400": { description: 누락/형식 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/challenge/weekly-photos:
+    get:
+      tags: [Photos]
+      summary: 특정 주간의 사진 인증 목록
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: startDate
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WeeklyPhoto' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/records/monthly-completion:
+    get:
+      tags: [Records]
+      summary: 월별 날짜별 완료율(%) 조회
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: month
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 12 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MonthlyCompletion' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/records/daily:
+    get:
+      tags: [Records]
+      summary: 특정 날짜의 운동 기록 요약
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DailyRecordItem' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/records/monthly-summary:
+    get:
+      tags: [Records]
+      summary: 이번 달 요약(많이/적게 한 부위, 최빈 운동)
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MonthlySummary' }}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/records/radar-data:
+    get:
+      tags: [Records]
+      summary: 기간별 부위 볼륨(레이더 차트용)
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: period
+          required: true
+          schema:
+            type: string
+            enum: [week, month, year, all]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RadarData' }}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/records/weight:
+    get:
+      tags: [Records]
+      summary: 체중/체성분 기록 목록
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WeightRecord' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+    post:
+      tags: [Records]
+      summary: 체중/체성분 기록 저장(Upsert)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WeightUpsertRequest' }
+      responses:
+        "201": { description: 저장 완료, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/exercises:
+    get:
+      tags: [Exercises]
+      summary: 전체 운동 목록
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Exercise' }}}}}
+        "500": { description: 서버 오류 }
+
+  /api/exercises/{exerciseId}/favorite:
+    patch:
+      tags: [Exercises]
+      summary: 즐겨찾기 토글
+      parameters:
+        - in: path
+          name: exerciseId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FavoriteToggleRequest' }
+      responses:
+        "200": { description: 변경됨 }
+        "400": { description: 파라미터 오류 }
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/exercises/{exerciseId}/hidden:
+    patch:
+      tags: [Exercises]
+      summary: 숨김 토글
+      parameters:
+        - in: path
+          name: exerciseId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HiddenToggleRequest' }
+      responses:
+        "200": { description: 변경됨 }
+        "400": { description: 파라미터 오류 }
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/create-dummy-plan:
+    post:
+      tags: [Plans & Schedules]
+      summary: 더미 플랜 생성(당일 3개 기본 세팅)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDummyPlanRequest' }
+      responses:
+        "200": { description: 생성/이미 존재, content: { application/json: { schema: { $ref: '#/components/schemas/CreateDummyPlanResponse' }}}}
+        "500": { description: 서버 오류 }
+
+  /api/plan/today:
+    get:
+      tags: [Plans & Schedules]
+      summary: 오늘 플랜 및 스케줄 상세
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TodayPlanResponse' }}}}
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule:
+    post:
+      tags: [Plans & Schedules]
+      summary: 스케줄(운동) 추가
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddScheduleRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { scheduleId: {type: integer}, exerciseId: {type: integer}}}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{id}/order:
+    patch:
+      tags: [Plans & Schedules]
+      summary: 스케줄 순서 변경
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: order
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{scheduleId}:
+    delete:
+      tags: [Plans & Schedules]
+      summary: 스케줄 삭제(관련 세트도 삭제)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiMessage' }}}}
+        "400": { description: 잘못된 ID }
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{scheduleId}/change-exercise:
+    post:
+      tags: [Plans & Schedules]
+      summary: 스케줄의 운동 교체(세트 리셋 후 기본 3세트 생성)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeExerciseRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { success: {type: boolean} }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule-id:
+    get:
+      tags: [Plans & Schedules]
+      summary: planId+exerciseId 조합으로 scheduleId 조회
+      parameters:
+        - in: query
+          name: planId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: exerciseId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { scheduleId: { type: integer }}}}}}
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/plans/{planId}/schedules:
+    get:
+      tags: [Plans & Schedules]
+      summary: 특정 플랜의 스케줄 목록(간단)
+      parameters:
+        - in: path
+          name: planId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/plans:
+    get:
+      tags: [Plans & Schedules]
+      summary: 사용자 모든 플랜(스케줄 포함)
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{scheduleId}/complete:
+    patch:
+      tags: [Plans & Schedules]
+      summary: 스케줄 완료 처리
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CompleteScheduleResponse' }}}}
+        "500": { description: 서버 오류 }
+
+  /api/reps-sets/{scheduleId}:
+    get:
+      tags: [Sets]
+      summary: REPS 세트 조회
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/RepsSet' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{scheduleId}/reps-sets:
+    patch:
+      tags: [Sets]
+      summary: REPS 세트 저장(전체 교체)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/RepsSet' }
+      responses:
+        "200": { description: OK }
+        "400": { description: 파라미터/형식 오류 }
+        "500": { description: 서버 오류 }
+
+  /api/sets/reps/complete:
+    patch:
+      tags: [Sets]
+      summary: REPS 세트 완료/시간 기록
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepsCompleteRequest' }
+      responses:
+        "200": { description: OK }
+        "404": { description: 세트 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/schedule/{scheduleId}/time-sets:
+    get:
+      tags: [Sets]
+      summary: TIME 세트 조회(초 단위)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TimeSet' }}}}}
+        "400": { description: 파라미터 오류 }
+        "500": { description: 서버 오류 }
+    patch:
+      tags: [Sets]
+      summary: TIME 세트 저장(전체 교체)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/TimeSet' }
+      responses:
+        "200": { description: OK }
+        "400": { description: 형식 오류 }
+        "404": { description: 스케줄 없음 }
+        "500": { description: 서버 오류 }
+
+  /generate-routine:
+    post:
+      tags: [GPT]
+      summary: GPT로 하루치 루틴 생성(문장형)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRoutineRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/GenerateRoutineResponse' }}}}
+        "400": { description: 누락 }
+        "500": { description: GPT 호출 실패 }
+
+  /recommend-exercise:
+    post:
+      tags: [GPT]
+      summary: GPT로 추천 운동 문장 생성
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecommendExerciseRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { recommendation: { type: string }}}}}}
+        "400": { description: 누락 }
+        "500": { description: 서버 오류 }

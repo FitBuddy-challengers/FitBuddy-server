@@ -1,9 +1,12 @@
-  {
+{
   "main": "server.js",
-  "scripts": { "start": "node server.js",
-  "dev": "node server.js"
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
   },
-  "engines": { "node": ">=22.0.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,6 +19,9 @@
     "multer": "^2.0.2",
     "nodemailer": "^6.10.1",
     "openai": "^5.1.1",
-    "pg": "^8.14.1"
+    "pg": "^8.14.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.8.1"
   }
 }
