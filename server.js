@@ -6,19 +6,25 @@ const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 const app = express();
-const port = 3000;
+// const port = 3000;
+const port = process.env.PORT || 3000;
 
 // 사진 업로드 설정
 const multer = require('multer'); // 파일 업로드를 위한 multer 임포트
 const path = require('path');   // 파일 경로 관리를 위해 추가
 const fs = require('fs'); // ★ 파일 시스템 모듈 추가
 require('dotenv').config();
-
-const uploadDir = 'uploads/';
-if (!fs.existsSync(uploadDir)){
-    fs.mkdirSync(uploadDir);
-    console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
+const uploadDir = process.env.UPLOAD_DIR || '/var/data/uploads';
+// ✅ 폴더 없으면 생성
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
 }
+// const uploadDir = 'uploads/';
+// if (!fs.existsSync(uploadDir)){
+//     fs.mkdirSync(uploadDir);
+//     console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
+// }
 
 // 파일 업로드 설정
 const storage = multer.diskStorage({
@@ -32,20 +38,30 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // 사진 업로드
-app.use('/uploads', express.static('uploads'));
+// ✅ 정적 서빙도 같은 경로로 통일
+app.use('/uploads', express.static(uploadDir));
+// app.use('/uploads', express.static('uploads'));
 
 // 미들웨어 등록
 app.use(cors());
 app.use(bodyParser.json());
 
-// PostgreSQL 연결
+// PostgreSQL 연결(로컬 -> 원격으로 수정)
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_DATABASE,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+user: process.env.DB_USER,
+host: process.env.DB_HOST,
+database: process.env.DB_DATABASE,
+password: process.env.DB_PASSWORD,
+port: Number(process.env.DB_PORT || 5432),
+ssl: { rejectUnauthorized: false }, // ★ Render용
 });
+// const pool = new Pool({
+//   user: process.env.DB_USER,
+//   host: process.env.DB_HOST,
+//   database: process.env.DB_DATABASE,
+//   password: process.env.DB_PASSWORD,
+//   port: process.env.DB_PORT,
+// });
 
 //  GPT API 설정
 const OpenAI = require('openai');
@@ -406,7 +422,7 @@ router.post('/plan/submit-ai', async (req, res) => {
         const timeRes = await client.query(
           `INSERT INTO exercise_time (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed)
            VALUES ($1, $2, 1, $3, false) RETURNING *`,
-          [schedId, exId, ex.seconds * 1000]
+          [schedId, exId, ex.seconds * 1000] //ms
         );
         timeResults.push(timeRes.rows[0]);
       } else {
@@ -600,10 +616,17 @@ router.post('/challenge/claim', async (req, res) => {
     await client.query(`UPDATE users SET coin = coin + $1 WHERE id = $2`, [rewardAmount, userId]);
     
     // ★★★ 핵심 수정: 0으로 초기화하는 대신, 달성한 만큼만 차감 ★★★
-    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
+    //await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
     // ★★★ 핵심 수정: 0으로 초기화하는 대신, 달성한 만큼만 차감 ★★★
-    await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
+    //await client.query(`UPDATE user_challenge_progress SET ${countColumn} = ${countColumn} - $1 WHERE user_id = $2`, [requiredCount, userId]);
     
+     await client.query(
+    `UPDATE user_challenge_progress 
+      SET ${countColumn} = ${countColumn} - $1 
+      WHERE user_id = $2`,
+    [requiredCount, userId]
+    );
+
     console.log(`[보상 지급] userId: ${userId}, type: ${challengeType}, reward: ${rewardAmount}, count updated.`);
     
     // ★★★ 수정: client 인자 전달 ★★★
@@ -612,7 +635,7 @@ router.post('/challenge/claim', async (req, res) => {
     // ★★★ 수정: client 인자 전달 ★★★
     // 4. 레벨업 확인
     await checkAndUpdateLevel(client, userId);
-    await checkAndUpdateLevel(client, userId);
+    //await checkAndUpdateLevel(client, userId);
     
     // 5. 변경된 사용자 정보 다시 조회
     const finalUserResult = await client.query('SELECT coin, level FROM users WHERE id = $1', [userId]);
@@ -1057,7 +1080,8 @@ if (isNaN(exId)) {
           await client.query(
             `INSERT INTO exercise_time (schedule_id, exercise_id, set_number, elapsed_time_millis, is_completed)
             VALUES ($1, $2, $3, $4, false)`,
-            [scheduleId, exId, i, 600000]
+            [scheduleId, exercise_id, i, 600000]
+            // [scheduleId, exId, i, 600000]
           );
         }
       } else {
@@ -2008,56 +2032,124 @@ app.get('/api/user-challenge-progress/:userId', async (req, res) => {
 
 //서버에서 자동 레벨업 처리
 //user_challenge_progress와 challenge_level를 비교하여 자동 레벨업
-// ★★★ 수정된 checkAndUpdateLevel 함수 ★★★
-async function checkAndUpdateLevel(client, userId) {
-    try {
-        console.log(`[레벨업 확인] userId: ${userId}에 대한 레벨업 검사를 시작합니다.`);
-        
-        // SQL 쿼리문 내부에 있던 주석을 모두 제거했습니다.
-        const progressResult = await client.query(`
-            SELECT attendance_count, photo_count, exercise_count
-            FROM user_challenge_progress
-            WHERE user_id = $1
-        `, [userId]);
+// ★★★ 교체본: client 전달 시 트랜잭션에 참여, 미전달 시 자체 커넥션/트랜잭션 처리 ★★★
+async function checkAndUpdateLevel(clientOrUserId, maybeUserId) {
+  let client, userId;
+  const hasExternalClient = typeof clientOrUserId === 'object' && clientOrUserId?.query;
 
-        const userResult = await client.query(`SELECT level FROM users WHERE id = $1`, [userId]);
-        
-        if (userResult.rows.length === 0 || progressResult.rows.length === 0) {
-            console.warn(`[레벨업 확인] userId: ${userId}의 사용자 또는 진행도 정보가 없어 건너뜁니다.`);
-            return;
-        }
+  if (hasExternalClient) {
+    client = clientOrUserId;
+    userId = maybeUserId;
+  } else {
+    userId = clientOrUserId;
+    client = await pool.connect();
+    await client.query('BEGIN');
+  }
 
-        const currentLevel = userResult.rows[0].level;
-        const progress = progressResult.rows[0];
+  try {
+    console.log(`[레벨업 확인] userId: ${userId} 검사 시작`);
 
-        const nextLevel = currentLevel + 1;
-        const nextLevelReqResult = await client.query(`
-            SELECT required_attendance, required_photo, required_exercise 
-            FROM challenge_level WHERE level = $1
-        `, [nextLevel]);
+    const progressResult = await client.query(
+      `SELECT attendance_count, photo_count, exercise_count
+       FROM user_challenge_progress WHERE user_id = $1`,
+      [userId]
+    );
+    const userResult = await client.query(
+      `SELECT level FROM users WHERE id = $1`,
+      [userId]
+    );
 
-        if (nextLevelReqResult.rowCount === 0) {
-            console.log(`[레벨업 확인] userId: ${userId}는 이미 최고 레벨입니다.`);
-            return; 
-        }
-
-        const required = nextLevelReqResult.rows[0];
-
-        if (
-            progress.attendance_count >= required.required_attendance &&
-            progress.photo_count >= required.required_photo &&
-            progress.exercise_count >= required.required_exercise
-        ) {
-            await client.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
-            console.log(`[레벨업!] userId: ${userId}, level: ${currentLevel} -> ${nextLevel}로 레벨업했습니다.`);
-        } else {
-            console.log(`[레벨업 확인] userId: ${userId}는 아직 레벨업 조건을 충족하지 못했습니다.`);
-        }
-    } catch (error) {
-        console.error(`❌ checkAndUpdateLevel 함수 실행 중 오류 발생 (userId: ${userId}):`, error);
-        throw error; 
+    if (!userResult.rows.length || !progressResult.rows.length) {
+      console.warn(`[레벨업 확인] userId: ${userId} 사용자/진행도 없음`);
+      if (!hasExternalClient) await client.query('ROLLBACK');
+      return;
     }
-} 
+
+    const currentLevel = userResult.rows[0].level;
+    const nextLevel = currentLevel + 1;
+
+    const reqRes = await client.query(
+      `SELECT required_attendance, required_photo, required_exercise
+       FROM challenge_level WHERE level = $1`,
+      [nextLevel]
+    );
+    if (!reqRes.rowCount) {
+      console.log(`[레벨업 확인] userId: ${userId} 최고 레벨 도달`);
+      if (!hasExternalClient) await client.query('COMMIT');
+      return;
+    }
+
+    const req = reqRes.rows[0];
+    const prog = progressResult.rows[0];
+
+    if (prog.attendance_count >= req.required_attendance &&
+        prog.photo_count >= req.required_photo &&
+        prog.exercise_count >= req.required_exercise) {
+      await client.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
+      console.log(`[레벨업!] userId: ${userId}, ${currentLevel} -> ${nextLevel}`);
+    } else {
+      console.log(`[레벨업 확인] userId: ${userId} 조건 미충족`);
+    }
+
+    if (!hasExternalClient) await client.query('COMMIT');
+  } catch (error) {
+    if (!hasExternalClient) await client.query('ROLLBACK');
+    console.error(`❌ checkAndUpdateLevel 에러 (userId: ${userId}):`, error);
+    throw error;
+  } finally {
+    if (!hasExternalClient) client.release();
+  }
+}
+// // ★★★ 수정된 checkAndUpdateLevel 함수 ★★★
+// async function checkAndUpdateLevel(client, userId) {
+//     try {
+//         console.log(`[레벨업 확인] userId: ${userId}에 대한 레벨업 검사를 시작합니다.`);
+        
+//         // SQL 쿼리문 내부에 있던 주석을 모두 제거했습니다.
+//         const progressResult = await client.query(`
+//             SELECT attendance_count, photo_count, exercise_count
+//             FROM user_challenge_progress
+//             WHERE user_id = $1
+//         `, [userId]);
+
+//         const userResult = await client.query(`SELECT level FROM users WHERE id = $1`, [userId]);
+        
+//         if (userResult.rows.length === 0 || progressResult.rows.length === 0) {
+//             console.warn(`[레벨업 확인] userId: ${userId}의 사용자 또는 진행도 정보가 없어 건너뜁니다.`);
+//             return;
+//         }
+
+//         const currentLevel = userResult.rows[0].level;
+//         const progress = progressResult.rows[0];
+
+//         const nextLevel = currentLevel + 1;
+//         const nextLevelReqResult = await client.query(`
+//             SELECT required_attendance, required_photo, required_exercise 
+//             FROM challenge_level WHERE level = $1
+//         `, [nextLevel]);
+
+//         if (nextLevelReqResult.rowCount === 0) {
+//             console.log(`[레벨업 확인] userId: ${userId}는 이미 최고 레벨입니다.`);
+//             return; 
+//         }
+
+//         const required = nextLevelReqResult.rows[0];
+
+//         if (
+//             progress.attendance_count >= required.required_attendance &&
+//             progress.photo_count >= required.required_photo &&
+//             progress.exercise_count >= required.required_exercise
+//         ) {
+//             await client.query(`UPDATE users SET level = $1 WHERE id = $2`, [nextLevel, userId]);
+//             console.log(`[레벨업!] userId: ${userId}, level: ${currentLevel} -> ${nextLevel}로 레벨업했습니다.`);
+//         } else {
+//             console.log(`[레벨업 확인] userId: ${userId}는 아직 레벨업 조건을 충족하지 못했습니다.`);
+//         }
+//     } catch (error) {
+//         console.error(`❌ checkAndUpdateLevel 함수 실행 중 오류 발생 (userId: ${userId}):`, error);
+//         throw error; 
+//     }
+// } 
 
 // 출석 1회 기록 로직 (user_attendance 없이 처리)
 app.post('/api/challenge/attendance/:userId', async (req, res) => {
