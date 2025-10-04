@@ -59,6 +59,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Swagger 마운트 함수 로드
+const mountSwagger = require('./swagger');
+
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadDir)); // 정적 경로 유지
@@ -79,6 +82,9 @@ const challengeRouter = require('./challenge')({ pool, upload }); // ✅ 추가
 app.use(authRouter);
 app.use(exerciseRouter);
 app.use(challengeRouter);
+
+// Swagger UI 마운트 (/docs, /openapi.json, /openapi.yaml)
+mountSwagger(app);
 
 console.log("✅ server.js 실행 완료 - 라우터 마운트됨");
 
