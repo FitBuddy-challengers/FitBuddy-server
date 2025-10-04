@@ -15,33 +15,26 @@ const path = require('path');   // 파일 경로 관리를 위해 추가
 const fs = require('fs'); // ★ 파일 시스템 모듈 추가
 
 
-// require('dotenv').config();
-// const uploadDir = process.env.UPLOAD_DIR || '/var/data/uploads';
-// // ✅ 폴더 없으면 생성
-// if (!fs.existsSync(uploadDir)) {
-//   fs.mkdirSync(uploadDir, { recursive: true });
-//   console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
-// }
-
-// Render 무료 배포 안정화: Render에선 /tmp, 유료 디스크 붙이면 /data
 const isRender = !!process.env.RENDER;
-const hasPaidDisk = process.env.PAID_DISK === 'true';
-const wantedFromEnv = process.env.UPLOAD_DIR; // 디버깅 로그용
-let uploadDir = isRender
-  ? (hasPaidDisk ? '/data/uploads' : '/tmp/uploads')
-  : path.join(__dirname, 'uploads');
 
-// 💣 방지: 만약 어디선가 UPLOAD_DIR=/var/... 가 주입되면 무시하고 경고만 띄움
-if (wantedFromEnv && /^\/var\//.test(wantedFromEnv)) {
-  console.warn(`⚠️ Ignoring UPLOAD_DIR='${wantedFromEnv}' (not writable on Render). Using '${uploadDir}'.`);
+// 1) 우선순위: 명시적 환경변수 > Render 권장 경로 > 로컬 기본
+// - Starter(무료): UPLOAD_DIR 미설정 시 /tmp/uploads 사용
+// - 유료(Persistent Disk): UPLOAD_DIR=/data/uploads 권장
+let uploadDir = process.env.UPLOAD_DIR
+  || (isRender ? '/tmp/uploads' : path.join(__dirname, 'uploads'));
+
+// 2) /var 경로는 Render에서 권한 문제 잦음 → 감지 시 경고 및 안전 폴백
+if (/^\/var\//.test(uploadDir) && isRender) {
+  console.warn(`⚠️ UPLOAD_DIR='${uploadDir}' 은 Render에서 쓰기 제한이 있을 수 있어요. '/tmp/uploads'로 폴백합니다.`);
+  uploadDir = '/tmp/uploads';
 }
 
+// 3) 디렉토리 생성 시도 → 실패하면 Render라면 최후 폴백 /tmp/uploads
 try {
   fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`✅ Upload dir: ${uploadDir} (RENDER=${isRender}, PAID_DISK=${hasPaidDisk}, ENV=${wantedFromEnv || 'none'})`);
+  console.log(`✅ Upload dir ready: ${uploadDir}`);
 } catch (e) {
   console.error(`❌ mkdir failed for '${uploadDir}':`, e);
-  // 최후의 안전장치: Render라면 /tmp로 폴백
   if (isRender) {
     uploadDir = '/tmp/uploads';
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -51,22 +44,21 @@ try {
   }
 }
 
-// const uploadDir = 'uploads/';
-// if (!fs.existsSync(uploadDir)){
-//     fs.mkdirSync(uploadDir);
-//     console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
-// }
+// 4) 정적 서빙 경로 일치화
+app.use('/uploads', express.static(uploadDir));
 
-// 파일 업로드 설정
+// 5) Multer 스토리지
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir); // 설정된 디렉토리 사용
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
 });
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
+
+
 
 // 사진 업로드
 // ✅ 정적 서빙도 같은 경로로 통일
