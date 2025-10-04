@@ -13,13 +13,24 @@ const port = process.env.PORT || 3000;
 const multer = require('multer'); // 파일 업로드를 위한 multer 임포트
 const path = require('path');   // 파일 경로 관리를 위해 추가
 const fs = require('fs'); // ★ 파일 시스템 모듈 추가
-require('dotenv').config();
-const uploadDir = process.env.UPLOAD_DIR || '/var/data/uploads';
-// ✅ 폴더 없으면 생성
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
-}
+
+
+// require('dotenv').config();
+// const uploadDir = process.env.UPLOAD_DIR || '/var/data/uploads';
+// // ✅ 폴더 없으면 생성
+// if (!fs.existsSync(uploadDir)) {
+//   fs.mkdirSync(uploadDir, { recursive: true });
+//   console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
+// }
+
+// 업로드 디렉토리 (무료 플랜: /tmp 사용, 유료 전환 시 .env로 /data/uploads 사용)
+const isRender = !!process.env.RENDER; // Render 환경이면 true
+const defaultUploadDir = isRender ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+const uploadDir = process.env.UPLOAD_DIR || defaultUploadDir;
+fs.mkdirSync(uploadDir, { recursive: true });
+console.log(`✅ Upload dir: ${uploadDir}`);
+
+
 // const uploadDir = 'uploads/';
 // if (!fs.existsSync(uploadDir)){
 //     fs.mkdirSync(uploadDir);
