@@ -381,6 +381,9 @@ module.exports = ({ pool, upload /* openai, uploadDir 필요없음 */ }) => {
         console.log(`[🖼 사진 인증 성공] userId=${userId}, date=${date}, photo_count +1`);
       }
 
+      // ✅ 여기! 사진 인증 처리 후 커밋 전에 레벨업 체크
+      await checkAndUpdateLevel(client, userId);
+
       await client.query('COMMIT');
       res.json({ success: true, message: '사진이 성공적으로 인증되었습니다.' });
     } catch (error) {
@@ -686,6 +689,129 @@ module.exports = ({ pool, upload /* openai, uploadDir 필요없음 */ }) => {
     } catch (error) {
       console.error('❌ 신체 기록 저장 실패:', error);
       res.status(500).json({ message: '서버 오류' });
+    }
+  });
+
+  // ───────────────── 상점(Store) ─────────────────
+  // 아이템 전체 목록
+  router.get('/api/store/items', async (_req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT id, name, price, required_level, image_url, "type", description
+        FROM items
+        ORDER BY required_level ASC, price ASC, id ASC
+      `);
+      res.json(rows);
+    } catch (e) {
+      console.error('❌ 아이템 목록 조회 실패:', e);
+      res.status(500).json({ message: '서버 오류' });
+    }
+  });
+
+  // 사용자 소유 아이템
+  router.get('/api/store/owned-items', async (req, res) => {
+    const userId = parseInt(req.query.userId, 10);
+    if (isNaN(userId)) return res.status(400).json({ message: "userId는 필수입니다." });
+
+    try {
+      const result = await pool.query(
+        'SELECT item_id FROM user_owned_items WHERE user_id = $1',
+        [userId]
+      );
+      const ownedItemIds = result.rows.map(r => r.item_id);
+      console.log(`[🛍 소유 아이템 조회] userId=${userId}, 개수=${ownedItemIds.length}`);
+      res.json(ownedItemIds);
+    } catch (error) {
+      console.error('❌ 소유 아이템 조회 실패:', error);
+      res.status(500).json({ message: '서버 오류' });
+    }
+  });
+
+  // 코인/레벨 잔액 조회
+  router.get('/api/store/balance/:userId', async (req, res) => {
+    const userId = parseInt(req.params.userId, 10);
+    if (isNaN(userId)) return res.status(400).json({ message: '유효한 userId가 필요합니다.' });
+
+    try {
+      const { rows } = await pool.query('SELECT coin, level FROM users WHERE id = $1', [userId]);
+      if (!rows.length) return res.status(404).json({ message: 'User not found' });
+      res.json({ coin: rows[0].coin ?? 0, level: rows[0].level ?? 1 });
+    } catch (e) {
+      console.error('❌ 잔액 조회 실패:', e);
+      res.status(500).json({ message: '서버 오류' });
+    }
+  });
+
+  // 아이템 구매
+  router.post('/api/store/purchase', async (req, res) => {
+    const { user_id, item_id } = req.body;
+    const userId = parseInt(user_id, 10);
+    const itemId = parseInt(item_id, 10);
+
+    console.log(`[🛒 아이템 구매 요청] userId=${userId}, itemId=${itemId}`);
+
+    if (isNaN(userId) || isNaN(itemId)) {
+      return res.status(400).json({ success: false, message: '사용자 ID와 아이템 ID는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const itemResult = await client.query(
+        'SELECT price, required_level FROM items WHERE id = $1 FOR UPDATE',
+        [itemId]
+      );
+      if (!itemResult.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: '존재하지 않는 아이템입니다.' });
+      }
+      const item = itemResult.rows[0];
+
+      const userResult = await client.query(
+        'SELECT level, coin FROM users WHERE id = $1 FOR UPDATE',
+        [userId]
+      );
+      if (!userResult.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+      }
+      const user = userResult.rows[0];
+
+      if (user.level < item.required_level) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ success: false, message: `레벨 ${item.required_level}이 필요합니다.` });
+      }
+      if (user.coin < item.price) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: '코인이 부족합니다.' });
+      }
+
+      const owned = await client.query(
+        'SELECT 1 FROM user_owned_items WHERE user_id = $1 AND item_id = $2',
+        [userId, itemId]
+      );
+      if (owned.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: '이미 소유하고 있는 아이템입니다.' });
+      }
+
+      const newCoin = user.coin - item.price;
+      await client.query('UPDATE users SET coin = $1 WHERE id = $2', [newCoin, userId]);
+      await client.query(
+        'INSERT INTO user_owned_items (user_id, item_id) VALUES ($1, $2)',
+        [userId, itemId]
+      );
+
+      await client.query('COMMIT');
+      console.log(`✅ 구매 성공 userId=${userId}, itemId=${itemId}, 남은 코인=${newCoin}`);
+      res.json({ success: true, message: '구매에 성공했습니다!', updatedCoin: newCoin });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('❌ 아이템 구매 실패:', error);
+      res.status(500).json({ success: false, message: '구매 처리 중 서버 오류가 발생했습니다.' });
+    } finally {
+      client.release();
     }
   });
 

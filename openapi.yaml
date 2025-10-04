@@ -1001,3 +1001,99 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { type: object, properties: { recommendation: { type: string }}}}}}
         "400": { description: 누락 }
         "500": { description: 서버 오류 }
+
+  /api/store/items:
+    get:
+      tags: [Store]
+      summary: 상점 아이템 목록 조회
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    price: { type: integer }
+                    required_level: { type: integer }
+                    image_url: { type: string, nullable: true }
+                    type: { type: string, nullable: true }
+                    description: { type: string, nullable: true }
+        "500": { description: 서버 오류 }
+
+  /api/store/owned-items:
+    get:
+      tags: [Store]
+      summary: 사용자 소유 아이템 목록(아이템 ID 배열)
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: integer }
+        "400": { description: 잘못된 요청 }
+        "500": { description: 서버 오류 }
+
+  /api/store/balance/{userId}:
+    get:
+      tags: [Store]
+      summary: 사용자 코인/레벨 조회
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coin: { type: integer }
+                  level: { type: integer }
+        "400": { description: 잘못된 요청 }
+        "404": { description: 없음 }
+        "500": { description: 서버 오류 }
+
+  /api/store/purchase:
+    post:
+      tags: [Store]
+      summary: 아이템 구매
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, item_id]
+              properties:
+                user_id: { type: integer }
+                item_id: { type: integer }
+      responses:
+        "200":
+          description: 구매 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  updatedCoin: { type: integer }
+        "400": { description: 잘못된 요청(누락/중복/코인 부족) }
+        "403": { description: 레벨 조건 미달 }
+        "404": { description: 사용자/아이템 없음 }
+        "500": { description: 서버 오류 }

@@ -7,6 +7,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { Pool } = require('pg');
 const OpenAI = require('openai');
+const swaggerUi = require('swagger-ui-express');
 
 // ───────────────── Render/업로드 경로 설정 ─────────────────
 const isRender = !!process.env.RENDER;
