@@ -23,13 +23,33 @@ const fs = require('fs'); // ★ 파일 시스템 모듈 추가
 //   console.log(`✅ '${uploadDir}' 디렉토리를 생성했습니다.`);
 // }
 
-// 업로드 디렉토리 (무료 플랜: /tmp 사용, 유료 전환 시 .env로 /data/uploads 사용)
-const isRender = !!process.env.RENDER; // Render 환경이면 true
-const defaultUploadDir = isRender ? '/tmp/uploads' : path.join(__dirname, 'uploads');
-const uploadDir = process.env.UPLOAD_DIR || defaultUploadDir;
-fs.mkdirSync(uploadDir, { recursive: true });
-console.log(`✅ Upload dir: ${uploadDir}`);
+// Render 무료 배포 안정화: Render에선 /tmp, 유료 디스크 붙이면 /data
+const isRender = !!process.env.RENDER;
+const hasPaidDisk = process.env.PAID_DISK === 'true';
+const wantedFromEnv = process.env.UPLOAD_DIR; // 디버깅 로그용
+let uploadDir = isRender
+  ? (hasPaidDisk ? '/data/uploads' : '/tmp/uploads')
+  : path.join(__dirname, 'uploads');
 
+// 💣 방지: 만약 어디선가 UPLOAD_DIR=/var/... 가 주입되면 무시하고 경고만 띄움
+if (wantedFromEnv && /^\/var\//.test(wantedFromEnv)) {
+  console.warn(`⚠️ Ignoring UPLOAD_DIR='${wantedFromEnv}' (not writable on Render). Using '${uploadDir}'.`);
+}
+
+try {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log(`✅ Upload dir: ${uploadDir} (RENDER=${isRender}, PAID_DISK=${hasPaidDisk}, ENV=${wantedFromEnv || 'none'})`);
+} catch (e) {
+  console.error(`❌ mkdir failed for '${uploadDir}':`, e);
+  // 최후의 안전장치: Render라면 /tmp로 폴백
+  if (isRender) {
+    uploadDir = '/tmp/uploads';
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log(`✅ Fallback to ${uploadDir}`);
+  } else {
+    throw e;
+  }
+}
 
 // const uploadDir = 'uploads/';
 // if (!fs.existsSync(uploadDir)){
