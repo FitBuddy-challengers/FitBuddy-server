@@ -103,7 +103,7 @@ module.exports = ({ pool, upload, openai, uploadDir }) => {
   // ───────────────────────────── GPT 라우트 ─────────────────────────────
 
   // 하루치 루틴 생성
-  router.post('/generate-routine', async (req, res) => {
+  router.post('/api/generate-routine', async (req, res) => {
     const { user_info, schedule_info } = req.body;
     if (!user_info || !schedule_info) {
       return res.status(400).json({ error: '필수 정보 누락' });
@@ -163,7 +163,7 @@ module.exports = ({ pool, upload, openai, uploadDir }) => {
   });
 
   // 추천 운동 생성
-  router.post('/recommend-exercise', async (req, res) => {
+  router.post('/api/recommend-exercise', async (req, res) => {
     const userId = req.body.userId;
     if (!userId) return res.status(400).json({ error: 'userId가 필요합니다.' });
 
