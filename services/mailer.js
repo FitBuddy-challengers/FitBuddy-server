@@ -10,8 +10,9 @@ const {
   PUBLIC_BASE_URL, // 대체 변수도 함께 고려
 } = process.env;
 
-// 템플릿 가져오기 (utils 폴더)
-const { renderOtpHtml, renderOtpPlain } = require('../utils/emailTemplates');
+// 템플릿 가져오기 
+const { renderOtpHtml, renderOtpPlain } = require('./emailTemplates');
+//const { renderOtpHtml, renderOtpPlain } = require('../utils/emailTemplates');
 
 // ───────────────────────── SMTP (Gmail) ─────────────────────────
 const transporter = nodemailer.createTransport({
