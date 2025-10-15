@@ -300,6 +300,13 @@ ${leastPart} 운동이 부족한 것 같아요.
   router.post('/api/create-dummy-plan', async (req, res) => {
     console.log("[🧪 더미 플랜 요청] 전체 req.body:", req.body);
     const { user_id, date } = req.body;
+
+      // ✅ user_id 필수 검증 추가
+    if (!user_id || isNaN(user_id)) {
+      console.error("❌ 유효하지 않은 user_id:", user_id);
+      return res.status(400).json({ message: "유효하지 않은 user_id입니다. 실제 존재하는 유저 ID를 전달하세요." });
+    }
+    
     const userId = user_id;
 
     console.log(`[🧪 더미 플랜 요청] userId: ${userId}, date: ${date}`);
