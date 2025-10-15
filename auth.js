@@ -215,37 +215,42 @@ module.exports = ({ pool }) => {
   });
 
   // userId로 사용자 정보 조회
-  router.get('/api/user-info/:userId', async (req, res) => {
-    const userId = parseInt(req.params.userId, 10);
-    try {
-      const result = await pool.query(`
-        SELECT name, age_group, gender, height, weight, diseases, workout_level, preferred_workouts, equipment
-        FROM users
-        WHERE id = $1
-      `, [userId]);
+  // userId로 사용자 정보 조회
+router.get('/api/user-info/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  try {
+    const result = await pool.query(`
+      SELECT name, level, coin, age_group, gender, height, weight, diseases,
+             workout_level, preferred_workouts, equipment
+      FROM users
+      WHERE id = $1
+    `, [userId]);
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      const row = result.rows[0];
-      console.log(`[ℹ️ 사용자 정보 조회] userId=${userId}`);
-      res.json({
-        name: row.name,
-        age_group: row.age_group,
-        gender: row.gender,
-        height: row.height,
-        weight: row.weight,
-        disease: row.diseases,
-        exercise_level: row.workout_level,
-        preferred_exercises: row.preferred_workouts?.split(',') ?? [],
-        exercise_equipment: row.equipment?.split(',') ?? [],
-      });
-    } catch (err) {
-      console.error('❌ 사용자 정보 조회 실패:', err);
-      res.status(500).json({ message: 'Server error' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
     }
-  });
+
+    const row = result.rows[0];
+    console.log(`[ℹ️ 사용자 정보 조회] userId=${userId}, name=${row.name}`);
+
+    res.json({
+      nickname: row.name,              // ✅ 여기! name을 nickname으로 매핑
+      level: row.level,                // ✅ 추가 (프론트에서 이미 받음)
+      coin: row.coin,                  // ✅ 추가 (프론트에서 이미 받음)
+      age_group: row.age_group,
+      gender: row.gender,
+      height: row.height,
+      weight: row.weight,
+      disease: row.diseases,
+      exercise_level: row.workout_level,
+      preferred_exercises: row.preferred_workouts?.split(',') ?? [],
+      exercise_equipment: row.equipment?.split(',') ?? [],
+    });
+  } catch (err) {
+    console.error('❌ 사용자 정보 조회 실패:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
   return router;
 };
