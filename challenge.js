@@ -314,7 +314,7 @@ module.exports = ({ pool, upload /* openai, uploadDir 필요없음 */ }) => {
 
   // ───────────────── 월간 사진 인증일(캘린더) ─────────────────
   // GET /challenge/monthly-records  (명세상 무접두 사용 흔적)
-  router.get('/challenge/monthly-records', async (req, res) => {
+  router.get('api/challenge/monthly-records', async (req, res) => {
     const userId = parseInt(req.query.userId, 10);
     const year = parseInt(req.query.year, 10);
     const month = parseInt(req.query.month, 10); // ✅ 전역변수 오탈자 제거
