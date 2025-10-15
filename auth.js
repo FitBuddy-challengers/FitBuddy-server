@@ -234,9 +234,10 @@ router.get('/api/user-info/:userId', async (req, res) => {
     console.log(`[ℹ️ 사용자 정보 조회] userId=${userId}, name=${row.name}`);
 
     res.json({
-      nickname: row.name,              // ✅ 여기! name을 nickname으로 매핑
-      level: row.level,                // ✅ 추가 (프론트에서 이미 받음)
-      coin: row.coin,                  // ✅ 추가 (프론트에서 이미 받음)
+      nickname: row.name,   // ✅ 프론트 호환용
+      name: row.name,       // (선택) 혹시 모를 호환
+      level: row.level,
+      coin: row.coin,
       age_group: row.age_group,
       gender: row.gender,
       height: row.height,
