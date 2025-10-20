@@ -106,42 +106,60 @@ module.exports = ({ pool, upload, openai, uploadDir }) => {
   router.post('/api/generate-routine', async (req, res) => {
     const { user_info, schedule_info } = req.body;
     if (!user_info || !schedule_info) {
-      return res.status(400).json({ error: '필수 정보 누락' });
+      return res.status(400).json({ error: '필수 정보 누락되었습니다.' });
     }
 
     const prompt = `
-당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 참고하여 한국어로 하루치 운동 루틴을 구성해주세요.
+    당신은 전문 퍼스널 트레이너이자 친근한 운동 상담 AI입니다.
+    아래 정보를 참고하여 사용자의 하루 운동 루틴을 **한국어로 자연스럽게 대화하듯 작성**해주세요.
 
-[사용자 정보]
-이름: ${user_info.name}
-연령대: ${user_info.age_group}
-성별: ${user_info.gender}
-키: ${user_info.height}cm
-몸무게: ${user_info.weight}kg
-질병 이력: ${user_info.disease}
-운동 수준: ${user_info.exercise_level}
-선호하는 운동: ${user_info.preferred_exercise?.join(', ') || '없음'}
-운동 도구: ${user_info.exercise_equipment?.join(', ') || '없음'}
+    [사용자 정보]
+    이름: ${user_info.name}
+    연령대: ${user_info.age_group}
+    성별: ${user_info.gender}
+    키: ${user_info.height}cm
+    몸무게: ${user_info.weight}kg
+    질병 이력: ${user_info.disease}
+    운동 수준: ${user_info.exercise_level}
+    선호하는 운동: ${user_info.preferred_exercise?.join(', ') || '없음'}
+    운동 도구: ${user_info.exercise_equipment?.join(', ') || '없음'}
 
-[운동 계획 정보]
-운동 시작일: ${schedule_info.start_date}
-운동 종료일: ${schedule_info.end_date}
-운동 요일: ${schedule_info.days_of_week?.join(', ') || '없음'}
-강화 부위: ${schedule_info.focus_area}
+    [운동 계획 정보]
+    운동 시작일: ${schedule_info.start_date}
+    운동 종료일: ${schedule_info.end_date}
+    운동 요일: ${schedule_info.days_of_week?.join(', ') || '없음'}
+    강화 부위: ${schedule_info.focus_area}
 
-[요청 사항]
-- 하루치 운동 루틴만 작성해 주세요.
-- 반드시 아래 형식을 정확히 지켜 주세요:
-  1. 스쿼트 - 15회 3세트
-  2. 런지 - 12회 3세트
-  3. 레그 레이즈 - 10회 3세트
-- 각 줄은 숫자로 시작하고, 운동 이름 다음엔 '-' 또는 ':' 를 사용해 주세요.
-- 횟수는 '회', 세트 수는 '세트' 단위를 붙여 주세요.
-- 타임이나 시간 기반 표현 없이, 횟수/세트만 사용해 주세요.
-- 마지막엔 스트레칭으로 마무리해 주세요.
+    [요청 사항]
+    1️⃣ 아래 순서를 반드시 지켜서, **친근한 말투로 자연스럽게** 작성해주세요.
 
-이 형식을 반드시 지켜 주세요.
-    `;
+    ① 첫 문장은 인사와 격려로 시작해주세요.  
+      예: "안녕하세요 ${user_info.name}님! 오늘도 운동 화이팅🔥"
+
+    ② 다음 문장에서는 사용자의 목표나 강화 부위를 참고해  
+      “${schedule_info.focus_area}를 강화하기 위해 이런 루틴을 추천드려요!”  
+      와 같이 **루틴을 추천하는 이유를 한 줄 추가**해주세요.  
+
+      ⚠️ 단, 여러 질문을 한꺼번에 하지 말고,  
+      **한 번에 한 가지 주제만 언급하는 자연스러운 대화**처럼 작성해주세요.
+
+    ③ 그 다음 하루치 운동 루틴을 아래 형식으로 작성해주세요.
+    - 하루치 루틴만 작성
+    - 각 줄은 번호로 시작하고, 운동 이름 뒤에 '-' 또는 ':' 사용
+    - 횟수는 '회', 세트는 '세트' 단위를 붙임
+    - 시간 기반 표현은 사용하지 않음 (단, 플랭크 등은 1분 가능)
+
+    [예시]
+    1. 스쿼트 - 15회 3세트 (하체 강화)
+    2. 런지 - 12회 3세트 (균형 향상)
+    3. 레그 레이즈 - 10회 3세트 (복부 자극)
+    4. 스트레칭으로 마무리
+
+    ④ 마지막 문장은 반드시 응원 문장으로 마무리해주세요.  
+      예: "꾸준히 하면 좋은 변화가 올 거예요💪 오늘도 파이팅입니다!"
+
+    위 순서와 형식을 반드시 지켜주세요.
+      `;
 
     try {
       const completion = await openai.chat.completions.create({
@@ -174,33 +192,33 @@ module.exports = ({ pool, upload, openai, uploadDir }) => {
       const leastPart = summaryData.leastFrequentPart?.part || '없음';
 
       const prompt = `
-당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 반영하여 추천 운동을 작성해 주세요.
+      당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 반영하여 추천 운동을 작성해 주세요.
 
-[사용자 정보]
-이름: ${userInfo.name}
-가장 많이 한 운동 부위: ${mostPart}
-가장 적게 한 운동 부위: ${leastPart}
-성별: ${userInfo.gender}
-키: ${userInfo.height} cm
-몸무게: ${userInfo.weight} kg
-지병/부상: ${userInfo.disease}
-운동 수준: ${userInfo.exercise_level}
-소유한 운동 기구: ${userInfo.exercise_equipment?.join(', ') || '없음'}
+      [사용자 정보]
+      이름: ${userInfo.name}
+      가장 많이 한 운동 부위: ${mostPart}
+      가장 적게 한 운동 부위: ${leastPart}
+      성별: ${userInfo.gender}
+      키: ${userInfo.height} cm
+      몸무게: ${userInfo.weight} kg
+      지병/부상: ${userInfo.disease}
+      운동 수준: ${userInfo.exercise_level}
+      소유한 운동 기구: ${userInfo.exercise_equipment?.join(', ') || '없음'}
 
-[요청 사항]
-- 반드시 아래 형식을 정확히 지켜 주세요:
-${userInfo.name}님은
-${mostPart} 운동을 주로 하셨어요.
-${leastPart} 운동이 부족한 것 같아요.
-다음에는 이런 운동 어떠신가요?
+      [요청 사항]
+      - 반드시 아래 형식을 정확히 지켜 주세요:
+      ${userInfo.name}님은
+      ${mostPart} 운동을 주로 하셨어요.
+      ${leastPart} 운동이 부족한 것 같아요.
+      다음에는 이런 운동 어떠신가요?
 
-1. 덤벨 이두 컬 - 이두 강화
-2. 버피 - 코어 안정성
-3. 버드독 - 밸런스 및 허리 안정화
+      1. 덤벨 이두 컬 - 이두 강화
+      2. 버피 - 코어 안정성
+      3. 버드독 - 밸런스 및 허리 안정화
 
-균형있는 운동은 건강한 몸을 만들어요.
-새로운 운동에도 도전해 보세요!
-      `;
+      균형있는 운동은 건강한 몸을 만들어요.
+      새로운 운동에도 도전해 보세요!
+            `;
 
       const gptResponse = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
