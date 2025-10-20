@@ -102,43 +102,41 @@ module.exports = ({ pool, upload, openai, uploadDir }) => {
 
   // ───────────────────────────── GPT 라우트 ai 채팅 부터! ─────────────────────────────
   router.post('/api/chat/welcome', async (req, res) => {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ error: '이름이 필요합니다.' });
-  
     const prompt = `
-    당신은 친근하고 활기찬 AI 트레이너입니다.
-    아래 조건을 모두 만족하는 한국어 인사말을 한 문장 또는 두 문장으로 작성해주세요.
+    당신은 밝고 에너지 넘치는 한국어 AI 트레이너입니다.
+    아래 조건을 모두 만족하는 인사 문구를 한두 문장으로 작성하세요.
   
     [조건]
-    - 사용자 이름 "${name}"을 자연스럽게 문장 안에 포함시켜 주세요.
-    - 밝고 긍정적인 톤으로 오늘의 운동을 응원하는 메시지를 작성하세요.
-    - 문장은 2문장을 넘지 않으며, 짧고 자연스러워야 합니다.
-    - 매번 다르게 표현해주세요 (항상 똑같은 문장 금지).
-    - 문장 끝에는 랜덤하게 💪🔥✨🏋️‍♀️😊 등의 이모지를 추가하세요.
+    - 사용자 이름은 언급하지 마세요.
+    - 오늘의 운동을 응원하고 동기부여하는 문장을 만드세요.
+    - 마지막에는 “함께 운동 루틴을 세워볼까요?” 또는 그와 비슷한 자연스러운 표현으로 마무리하세요.
+    - 문장은 1~2문장 이내로, 짧고 밝고 자연스럽게 작성하세요.
+    - 💪🔥✨🏋️‍♀️😊 등의 이모지를 랜덤으로 섞어주세요.
+    - 매번 다른 문장으로 표현되게 하세요.
   
     [예시]
-    - "${name}님! 오늘도 파워풀하게 운동해봐요🔥"
-    - "좋은 하루예요, ${name}님! 땀 흘릴 준비 되셨죠?💪"
-    - "${name}님, 오늘은 어제보다 더 강해질 시간이에요✨"
+    - "오늘도 몸이 달아오를 준비 되셨나요?🔥 이번엔 함께 운동 루틴을 세워볼까요?💪"
+    - "기분 좋은 하루예요😊 오늘의 목표를 향해 같이 운동 계획을 만들어봐요!"
+    - "근육에 활력을 불어넣을 시간이에요✨ 오늘 루틴은 어떤 느낌으로 가볼까요?"
     `;
   
     try {
       const completion = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: '너는 밝고 활기찬 한국인 퍼스널 트레이너 AI야.' },
+          { role: 'system', content: 'You are a bright and energetic Korean personal trainer AI.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.9,
-        max_tokens: 50,
+        max_tokens: 60,
       });
   
       const message = completion.choices[0].message.content.trim();
-      console.log('🤖 생성된 인사 메시지:', message);
+      console.log('🤖 Generated greeting message:', message);
       res.json({ message });
     } catch (error) {
-      console.error('❌ GPT 호출 실패:', error.response?.data || error.message);
-      res.status(500).json({ error: '인사 메시지 생성 실패' });
+      console.error('❌ GPT call failed:', error.response?.data || error.message);
+      res.status(500).json({ error: 'Failed to create greeting message' });
     }
   });
 
