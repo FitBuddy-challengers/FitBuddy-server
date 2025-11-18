@@ -1,78 +1,61 @@
-// src/route/exercise.route.js
-
-import { Router } from "express";
-import exerciseController from "../controllers/exercise.controller.js";
-
+import planListController from "../controller/exercise/planList.controller.js";
+import repsController from "../controller/exercise/reps.controller.js";
+import timeController from "../controller/exercise/time.controller.js";
+import submitAiController from "../controller/exercise/submitAi.controller.js";
 export default function createExerciseRouter({ pool, upload, openai, uploadDir }) {
   const router = Router();
 
-  // controller 인스턴스 생성
-  const controller = exerciseController({ pool, upload, openai, uploadDir });
+  const ai = exerciseAiController({ pool, openai });
+  const master = masterController({ pool });
+  const plan = planController({ pool });
+  const today = todayPlanController({ pool });
+  const schedule = scheduleController({ pool });
+  const planList = planListController({ pool });
+  const submitAi = submitAiController({ pool });
 
-  // ────────────────────────────────────────────────
-  // GPT 관련
-  // ────────────────────────────────────────────────
-  router.post("/api/chat/welcome", controller.welcomeChat);
-  router.post("/api/generate-routine", controller.generateRoutine);
-  router.post("/api/recommend-exercise", controller.recommendExercise);
+  // GPT
+  router.post("/api/chat/welcome", ai.welcomeChat);
+  router.post("/api/generate-routine", ai.generateRoutine);
+  router.post("/api/recommend-exercise", ai.recommendExercise);
 
-  // ────────────────────────────────────────────────
-  // Exercise Master
-  // ────────────────────────────────────────────────
-  router.get("/api/exercises", controller.getExercises);
-  router.patch("/api/exercises/:exerciseId/favorite", controller.toggleFavorite);
-  router.patch("/api/exercises/:exerciseId/hidden", controller.toggleHidden);
+  // 운동 마스터
+  router.get("/api/exercises", master.getExercises);
+  router.patch("/api/exercises/:exerciseId/favorite", master.toggleFavorite);
+  router.patch("/api/exercises/:exerciseId/hidden", master.toggleHidden);
 
-  // ────────────────────────────────────────────────
-  // Today Plan
-  // ────────────────────────────────────────────────
-  router.get("/api/plan/today", controller.getTodayPlan);
+  // 더미 플랜
+  router.post("/api/create-dummy-plan", plan.createDummyPlan);
 
-  // ────────────────────────────────────────────────
-  // Dummy Plan
-  // ────────────────────────────────────────────────
-  router.post("/api/create-dummy-plan", controller.createDummyPlan);
+  // 오늘 플랜
+  router.get("/api/plan/today", today.getTodayPlan);
 
-  // ────────────────────────────────────────────────
-  // Schedule CRUD
-  // ────────────────────────────────────────────────
-  router.post("/api/schedule", controller.addSchedule);
-  router.patch("/api/schedule/:id/order", controller.updateScheduleOrder);
-  router.delete("/api/schedule/:scheduleId", controller.deleteSchedule);
-  router.post("/api/schedule/:scheduleId/change-exercise", controller.changeExercise);
+  // 스케줄 CRUD
+  router.post("/api/schedule", schedule.addSchedule);
+  router.patch("/api/schedule/:id/order", schedule.updateScheduleOrder);
+  router.delete("/api/schedule/:scheduleId", schedule.deleteSchedule);
+  router.post("/api/schedule/:scheduleId/change-exercise", schedule.changeExercise);
 
-  // ────────────────────────────────────────────────
-  // scheduleId 조회
-  // ────────────────────────────────────────────────
-  router.get("/api/schedule-id", controller.getScheduleId);
+  //  scheduleId 찾기
+  router.get("/api/schedule-id", planList.getScheduleId);
 
-  // ────────────────────────────────────────────────
-  // Plans
-  // ────────────────────────────────────────────────
-  router.get("/api/plans", controller.getPlans);
+  //  특정 플랜의 스케줄 목록
+  router.get("/api/plans/:planId/schedules", planList.getPlanSchedules);
 
-  // ────────────────────────────────────────────────
-  // Plan Schedules
-  // ────────────────────────────────────────────────
-  router.get("/api/plans/:planId/schedules", controller.getPlanSchedules);
+  //  전체 플랜 (스케줄 포함)
+  router.get("/api/plans", planList.getPlans);
 
-  // ────────────────────────────────────────────────
-  // Reps Sets
-  // ────────────────────────────────────────────────
-  router.get("/api/reps-sets/:scheduleId", controller.getRepsSets);
-  router.patch("/api/schedule/:scheduleId/reps-sets", controller.saveRepsSets);
-  router.patch("/api/sets/reps/complete", controller.completeReps);
+  //  스케줄 완료 처리
+  router.patch("/api/schedule/:scheduleId/complete", planList.completeSchedule);
 
-  // ────────────────────────────────────────────────
-  // Time Sets
-  // ────────────────────────────────────────────────
-  router.get("/api/schedule/:scheduleId/time-sets", controller.getTimeSets);
-  router.patch("/api/schedule/:scheduleId/time-sets", controller.saveTimeSets);
+  // REPS
+  router.get("/api/reps-sets/:scheduleId", reps.getRepsSets);
+  router.patch("/api/schedule/:scheduleId/reps-sets", reps.saveRepsSets);
+  router.patch("/api/sets/reps/complete", reps.completeReps);
 
-  // ────────────────────────────────────────────────
-  // Submit AI
-  // ────────────────────────────────────────────────
-  router.post("/api/plan/submit-ai", controller.submitAi);
+  // TIME
+  router.get("/api/schedule/:scheduleId/time-sets", time.getTimeSets);
+  router.patch("/api/schedule/:scheduleId/time-sets", time.saveTimeSets);
 
+  router.post("/api/plan/submit-ai", submitAi.submitAi);
   return router;
 }
