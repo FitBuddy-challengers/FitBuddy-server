@@ -10,7 +10,6 @@ import multer from "multer";
 import { Pool } from "pg";
 import OpenAI from "openai";
 import swaggerUi from "swagger-ui-express";
-
 import mountSwagger from "./swagger/swagger.js";
 import authRouter from "./controller/auth.controller.js";
 // import exerciseRouter from "./controller/exercise.controller.js";
