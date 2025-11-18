@@ -1,9 +1,16 @@
+import express from "express";
+import exerciseAiController from "../controller/exercise/exerciseAi.controller.js"; 
+import masterController from "../controller/exercise/master.controller.js"; 
+import planController from "../controller/exercise/plan.controller.js"; 
+import todayPlanController from "../controller/exercise/todayPlan.controller.js"; 
+import scheduleController from "../controller/exercise/schedule.controller.js"; 
 import planListController from "../controller/exercise/planList.controller.js";
 import repsController from "../controller/exercise/reps.controller.js";
 import timeController from "../controller/exercise/time.controller.js";
 import submitAiController from "../controller/exercise/submitAi.controller.js";
 export default function createExerciseRouter({ pool, upload, openai, uploadDir }) {
-  const router = Router();
+  const router = express.Router();
+  //const router = Router();
 
   const ai = exerciseAiController({ pool, openai });
   const master = masterController({ pool });
