@@ -1,13 +1,14 @@
 // src/app.js
 import dotenv from "dotenv";
 dotenv.config();
-
 import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { Pool } from "pg";
+//import { Pool } from "pg";
+import pg from "pg";
+const { Pool } = pg;
 import OpenAI from "openai";
 import swaggerUi from "swagger-ui-express";
 import mountSwagger from "./swagger/swagger.js";
