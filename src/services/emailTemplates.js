@@ -1,25 +1,31 @@
-// utils/emailTemplates.js (refined)
-const fs = require('fs');
-const path = require('path');
+//src/services/emailTemplates.js -> esm으로 수정됨. 
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM 환경에서는 __dirname 대신 import.meta.url을 사용해야 합니다.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // === 브랜드 설정 ===
 const BRAND = {
   name: 'FitBuddy',
-  primary: '#2569ED',     // 메인 브랜드 컬러
+  primary: '#2569ED',    // 메인 브랜드 컬러
   primaryDark: '#1D4ED8', // 버튼/그라데이션 보조
   text: '#0F172A',        // 거의 블랙
-  subText: '#475569',     // 중간 그레이
-  bg: '#F4F6FA',          // 전체 배경
+  subText: '#475569',    // 중간 그레이
+  bg: '#F4F6FA',         // 전체 배경
   card: '#FFFFFF',
   border: '#E2E8F0',
-  heroBgTop: '#2569ED',   // 히어로 그라데이션 시작
+  heroBgTop: '#2569ED',  // 히어로 그라데이션 시작
   heroBgBottom: '#5BA8FF',// 히어로 그라데이션 종료
   appUrl: process.env.APP_BASE_URL || '#',
   logoUrl: process.env.MALMUNGCHI_LOGO_URL || null,
 };
 
 // === 텍스트 버전 ===
-function renderOtpPlain(name, code, minutes = 5) {
+export function renderOtpPlain(name, code, minutes = 5) {
   return `[${BRAND.name}] 개발용 OTP 코드
 
 ${name ? `${name}님, ` : ''}아래 일회용 코드로 인증을 진행하세요. (유효기간 ${minutes}분)
@@ -31,7 +37,7 @@ ${code}
 
 // === HTML 버전 ===
 // 옵션: { logoDataUri, pretendardSemiBoldDataUri, appUrl }
-function renderOtpHtml(name, code, minutes = 5, opts = {}) {
+export function renderOtpHtml(name, code, minutes = 5, opts = {}) {
   const safeCode = String(code).replace(/\s+/g, '');
   const year = new Date().getFullYear();
   const appUrl = opts.appUrl ?? BRAND.appUrl;
@@ -55,12 +61,12 @@ function renderOtpHtml(name, code, minutes = 5, opts = {}) {
   const ctaHtml = appUrl && appUrl !== '#'
     ? `<a href="${appUrl}"
           style="display:inline-block; padding:14px 22px; color:#FFFFFF; text-decoration:none; font-weight:700; font-size:14px; border-radius:12px; letter-spacing:.2px;">
-         앱으로 돌아가기
-       </a>`
+          앱으로 돌아가기
+        </a>`
     : `<div role="button"
             style="display:inline-block; padding:14px 22px; color:#FFFFFF; text-decoration:none; font-weight:700; font-size:14px; border-radius:12px; letter-spacing:.2px;">
-         앱 내 인증 화면으로 이동해 주세요
-       </div>`;
+          앱 내 인증 화면으로 이동해 주세요
+        </div>`;
 
   return `
 <!doctype html>
@@ -103,7 +109,7 @@ function renderOtpHtml(name, code, minutes = 5, opts = {}) {
             <td style="padding:32px 28px 26px 28px; background: linear-gradient(135deg, ${BRAND.heroBgTop} 0%, ${BRAND.heroBgBottom} 100%);" align="center">
               ${logoSrc ? `
                 <img src="${logoSrc}" width="72" height="72" alt="${BRAND.name} 로고"
-                     style="display:block; width:56px; height:56px; border:0; margin:0 auto 12px auto; border-radius:14px; background:rgba(255,255,255,.08);">
+                    style="display:block; width:56px; height:56px; border:0; margin:0 auto 12px auto; border-radius:14px; background:rgba(255,255,255,.08);">
               ` : ``}
               <div style="font-family: ${opts.pretendardSemiBoldDataUri ? 'Pretendard, ' : ''}system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Apple SD Gothic Neo, '맑은 고딕', sans-serif; font-size:20px; font-weight:700; color:#FFFFFF; letter-spacing:.2px;">
                 ${BRAND.name}
@@ -134,7 +140,7 @@ function renderOtpHtml(name, code, minutes = 5, opts = {}) {
 
               <!-- OTP 카드 -->
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
-                     style="border:1px dashed ${BRAND.border}; border-radius:14px; background:#F9FBFF;">
+                    style="border:1px dashed ${BRAND.border}; border-radius:14px; background:#F9FBFF;">
                 <tr>
                   <td align="center" style="padding:26px 22px;">
                     <div class="otp" style="font-size:34px; line-height:42px; font-weight:800; letter-spacing:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; color:${BRAND.text};">
@@ -199,52 +205,49 @@ function renderOtpHtml(name, code, minutes = 5, opts = {}) {
 </html>
   `;
 }
-
-module.exports = { renderOtpHtml, renderOtpPlain };
-
 /* =========================
-   미리보기 전용 실행(안전)
+   미리보기 전용 실행(안전) -> 이건 CommonJS 기반이므로 서버 실행 오류발생으로 제거함. 디자인은 확인됨.
    node utils/emailTemplates.js
    ========================= */
-if (require.main === module) {
-  // 1) 로고 PNG/WEBP → Base64 data URI (미리보기 편의)
-  const LOCAL_LOGO_PATH = process.env.LOCAL_LOGO_PATH ||
-    path.join(__dirname, 'malmungchi.png');
+// if (require.main === module) {
+//   // 1) 로고 PNG/WEBP → Base64 data URI (미리보기 편의)
+//   const LOCAL_LOGO_PATH = process.env.LOCAL_LOGO_PATH ||
+//     path.join(__dirname, 'malmungchi.png');
 
-  let logoDataUri = null;
-  try {
-    if (fs.existsSync(LOCAL_LOGO_PATH)) {
-      const mime = LOCAL_LOGO_PATH.endsWith('.webp') ? 'image/webp'
-                 : LOCAL_LOGO_PATH.endsWith('.jpg') || LOCAL_LOGO_PATH.endsWith('.jpeg') ? 'image/jpeg'
-                 : 'image/png';
-      const b64 = fs.readFileSync(LOCAL_LOGO_PATH).toString('base64');
-      logoDataUri = `data:${mime};base64,${b64}`;
-    }
-  } catch {}
+//   let logoDataUri = null;
+//   try {
+//     if (fs.existsSync(LOCAL_LOGO_PATH)) {
+//       const mime = LOCAL_LOGO_PATH.endsWith('.webp') ? 'image/webp'
+//                  : LOCAL_LOGO_PATH.endsWith('.jpg') || LOCAL_LOGO_PATH.endsWith('.jpeg') ? 'image/jpeg'
+//                  : 'image/png';
+//       const b64 = fs.readFileSync(LOCAL_LOGO_PATH).toString('base64');
+//       logoDataUri = `data:${mime};base64,${b64}`;
+//     }
+//   } catch {}
 
-  // 2) Pretendard-SemiBold.ttf → Base64 data URI (가능한 메일앱에서만 적용)
-  const LOCAL_FONT_PATH = process.env.LOCAL_FONT_PATH ||
-    path.join(__dirname, 'Pretendard-SemiBold.ttf');
+//   // 2) Pretendard-SemiBold.ttf → Base64 data URI (가능한 메일앱에서만 적용)
+//   const LOCAL_FONT_PATH = process.env.LOCAL_FONT_PATH ||
+//     path.join(__dirname, 'Pretendard-SemiBold.ttf');
 
-  let pretendardSemiBoldDataUri = null;
-  try {
-    if (fs.existsSync(LOCAL_FONT_PATH)) {
-      const b64 = fs.readFileSync(LOCAL_FONT_PATH).toString('base64');
-      pretendardSemiBoldDataUri = `data:font/ttf;base64,${b64}`;
-    }
-  } catch {}
+//   let pretendardSemiBoldDataUri = null;
+//   try {
+//     if (fs.existsSync(LOCAL_FONT_PATH)) {
+//       const b64 = fs.readFileSync(LOCAL_FONT_PATH).toString('base64');
+//       pretendardSemiBoldDataUri = `data:font/ttf;base64,${b64}`;
+//     }
+//   } catch {}
 
-  const html = renderOtpHtml('채영', '123456', 5, {
-    logoDataUri,
-    pretendardSemiBoldDataUri,
-    appUrl: process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || '#',
-  });
+//   const html = renderOtpHtml('채영', '123456', 5, {
+//     logoDataUri,
+//     pretendardSemiBoldDataUri,
+//     appUrl: process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || '#',
+//   });
 
-  const out = path.join(__dirname, 'otp_preview.html');
-  fs.writeFileSync(out, html, 'utf8');
+//   const out = path.join(__dirname, 'otp_preview.html');
+//   fs.writeFileSync(out, html, 'utf8');
 
-  console.log('✅ otp_preview.html 파일이 생성되었습니다.');
-  console.log('👉 파일을 크롬/엣지로 열어 디자인을 확인하세요.');
-  console.log('   로고 경로 바꾸기:  LOCAL_LOGO_PATH="C:\\\\Users\\\\office\\\\Downloads\\\\전달사항\\\\malmungchi.png"');
-  console.log('   폰트 경로 바꾸기:  LOCAL_FONT_PATH="C:\\\\Users\\\\office\\\\Downloads\\\\전달사항\\\\Pretendard-SemiBold.ttf"');
-}
+//   console.log('✅ otp_preview.html 파일이 생성되었습니다.');
+//   console.log('👉 파일을 크롬/엣지로 열어 디자인을 확인하세요.');
+//   console.log('   로고 경로 바꾸기:  LOCAL_LOGO_PATH="C:\\\\Users\\\\office\\\\Downloads\\\\전달사항\\\\malmungchi.png"');
+//   console.log('   폰트 경로 바꾸기:  LOCAL_FONT_PATH="C:\\\\Users\\\\office\\\\Downloads\\\\전달사항\\\\Pretendard-SemiBold.ttf"');
+// }

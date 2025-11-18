@@ -1,7 +1,9 @@
-// src/services/mailer.js
+// src/services/mailer.js (ESM으로 재수정)
+
 import nodemailer from "nodemailer";
 import crypto from "crypto";
-import { renderOtpHtml, renderOtpPlain } from "./emailTemplates.js";
+// emailTemplates.js도 ESM으로 export 되었다고 가정합니다.
+import { renderOtpHtml, renderOtpPlain } from "./emailTemplates.js"; 
 
 const {
   EMAIL_USER,
@@ -94,102 +96,12 @@ function buildOtpMail({ to, name, otp, minutes = 5 }) {
 }
 
 // ───────────────────────── Public API ─────────────────────────
+// module.exports 대신 export 사용
 export async function sendOtpMail(to, otp, { name, minutes = 5 } = {}) {
   const mail = buildOtpMail({ to, name, otp, minutes });
   const info = await sendWithRetry(mail);
   return info;
 }
-// // services/mailer.js
-// const nodemailer = require('nodemailer');
-// const crypto = require('crypto');
-
-// const {
-//   EMAIL_USER,      // Gmail 주소 (예: yourname@gmail.com)
-//   EMAIL_PASS,      // Gmail 앱 비밀번호 (2단계 인증 후 발급)
-//   NODE_ENV,
-//   APP_BASE_URL,    // 선호: 앱으로 돌아가기 링크
-//   PUBLIC_BASE_URL, // 대체 변수도 함께 고려
-// } = process.env;
-
-// // 템플릿 가져오기 
-// const { renderOtpHtml, renderOtpPlain } = require('./emailTemplates');
-// //const { renderOtpHtml, renderOtpPlain } = require('../utils/emailTemplates');
-
-// // ───────────────────────── SMTP (Gmail) ─────────────────────────
-// const transporter = nodemailer.createTransport({
-//   pool: true,
-//   host: 'smtp.gmail.com',
-//   port: 465,
-//   secure: true,
-//   auth: { user: EMAIL_USER, pass: EMAIL_PASS },
-//   connectionTimeout: 10_000,
-//   greetingTimeout: 10_000,
-//   socketTimeout: 20_000,
-// });
-
-// // 개발/스테이징에서만 연결 검증
-// if (NODE_ENV !== 'production') {
-//   transporter.verify()
-//     .then(() => console.log('📧 Mailer connected OK'))
-//     .catch(err => console.error('📧 Mailer verify failed:', err));
-// }
-
-// // ───────────────────────── Retry helper ─────────────────────────
-// async function sendWithRetry(mailOptions, maxRetries = 3) {
-//   let attempt = 0, delay = 400;
-//   // 간단 지수 백오프 재시도
-//   while (true) {
-//     try {
-//       return await transporter.sendMail(mailOptions);
-//     } catch (err) {
-//       attempt++;
-//       const isLast = attempt >= maxRetries;
-//       const transient = /ETIMEDOUT|ECONNRESET|EAI_AGAIN|ENOTFOUND|Too many login attempts/i.test(err?.message || '');
-//       if (!transient || isLast) throw err;
-//       await new Promise(r => setTimeout(r, delay));
-//       delay *= 2;
-//     }
-//   }
-// }
-
-// // ───────────────────────── Template builder (템플릿 사용) ─────────────────────────
-// function buildOtpMail({ to, name, otp, minutes = 5 }) {
-//   const subject = `[FitBuddy] OTP 코드`;
-//   const html = renderOtpHtml(name, otp, minutes, {
-//     appUrl: APP_BASE_URL || PUBLIC_BASE_URL || '#',
-//     // 필요 시: logoDataUri, pretendardSemiBoldDataUri 도 전달 가능
-//   });
-//   const text = renderOtpPlain(name, otp, minutes);
-
-//   const domain = (EMAIL_USER || 'fitbuddy.local').split('@')[1] || 'fitbuddy.local';
-//   const messageId = `<otp-${Date.now()}-${crypto.randomBytes(6).toString('hex')}@${domain}>`;
-
-//   return {
-//     from: EMAIL_USER,      // Gmail은 from=auth user가 가장 안전
-//     to,
-//     subject,
-//     text,
-//     html,
-//     messageId,
-//     headers: {
-//       'X-Entity-Ref-ID': messageId,
-//       'X-Campaign': 'otp',
-//       'Auto-Submitted': 'auto-generated',
-//       'List-Unsubscribe': `<mailto:${EMAIL_USER}>`,
-//       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-//     },
-//   };
-// }
-
-// // ───────────────────────── Public API ─────────────────────────
-// // 사용법: sendOtpMail('user@example.com', '501717', { name: '채영', minutes: 5 })
-// async function sendOtpMail(to, otp, { name, minutes = 5 } = {}) {
-//   const mail = buildOtpMail({ to, name, otp, minutes });
-//   const info = await sendWithRetry(mail);
-//   return info; // { messageId, response, ... }
-// }
-
-// module.exports = { sendOtpMail };
 
 
 
