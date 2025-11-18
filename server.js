@@ -1,109 +1,109 @@
-// server.js
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const { Pool } = require('pg');
-const OpenAI = require('openai');
-const swaggerUi = require('swagger-ui-express');
+// server.js //리펙토링 진행함. src/app.js + src/index.js 로 분리함!
+// require('dotenv').config();
+// const express = require('express');
+// const cors = require('cors');
+// const path = require('path');
+// const fs = require('fs');
+// const multer = require('multer');
+// const { Pool } = require('pg');
+// const OpenAI = require('openai');
+// const swaggerUi = require('swagger-ui-express');
 
-// ───────────────── Render/업로드 경로 설정 ─────────────────
-const isRender = !!process.env.RENDER;
+// // ───────────────── Render/업로드 경로 설정 ─────────────────
+// const isRender = !!process.env.RENDER;
 
-let uploadDir = process.env.UPLOAD_DIR
-  || (isRender ? '/tmp/uploads' : path.join(__dirname, 'uploads'));
+// let uploadDir = process.env.UPLOAD_DIR
+//   || (isRender ? '/tmp/uploads' : path.join(__dirname, 'uploads'));
 
-if (/^\/var\//.test(uploadDir) && isRender) {
-  console.warn(`⚠️ UPLOAD_DIR='${uploadDir}' 은 Render에서 쓰기 제한이 있어 '/tmp/uploads'로 폴백합니다.`);
-  uploadDir = '/tmp/uploads';
-}
-try {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`✅ 업로드 디렉토리 준비 완료: ${uploadDir}`);
-} catch (e) {
-  console.error(`❌ 업로드 디렉토리 생성 실패 '${uploadDir}':`, e);
-  if (isRender) {
-    uploadDir = '/tmp/uploads';
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log(`✅ 업로드 디렉토리 폴백 완료: ${uploadDir}`);
-  } else {
-    throw e;
-  }
-}
+// if (/^\/var\//.test(uploadDir) && isRender) {
+//   console.warn(`⚠️ UPLOAD_DIR='${uploadDir}' 은 Render에서 쓰기 제한이 있어 '/tmp/uploads'로 폴백합니다.`);
+//   uploadDir = '/tmp/uploads';
+// }
+// try {
+//   fs.mkdirSync(uploadDir, { recursive: true });
+//   console.log(`✅ 업로드 디렉토리 준비 완료: ${uploadDir}`);
+// } catch (e) {
+//   console.error(`❌ 업로드 디렉토리 생성 실패 '${uploadDir}':`, e);
+//   if (isRender) {
+//     uploadDir = '/tmp/uploads';
+//     fs.mkdirSync(uploadDir, { recursive: true });
+//     console.log(`✅ 업로드 디렉토리 폴백 완료: ${uploadDir}`);
+//   } else {
+//     throw e;
+//   }
+// }
 
-// ───────────────── Multer 스토리지 ─────────────────
-const multerStorage = multer.diskStorage({
-  destination: function (_req, _file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (_req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: multerStorage });
+// // ───────────────── Multer 스토리지 ─────────────────
+// const multerStorage = multer.diskStorage({
+//   destination: function (_req, _file, cb) {
+//     cb(null, uploadDir);
+//   },
+//   filename: function (_req, file, cb) {
+//     cb(null, Date.now() + path.extname(file.originalname));
+//   }
+// });
+// const upload = multer({ storage: multerStorage });
 
-// ───────────────── DB & OpenAI ─────────────────
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_DATABASE,
-  password: process.env.DB_PASSWORD,
-  port: Number(process.env.DB_PORT || 5432),
-  ssl: { rejectUnauthorized: false },
-});
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// // ───────────────── DB & OpenAI ─────────────────
+// const pool = new Pool({
+//   user: process.env.DB_USER,
+//   host: process.env.DB_HOST,
+//   database: process.env.DB_DATABASE,
+//   password: process.env.DB_PASSWORD,
+//   port: Number(process.env.DB_PORT || 5432),
+//   ssl: { rejectUnauthorized: false },
+// });
+// const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ───────────────── Express 앱 ─────────────────
-const app = express();
-const port = process.env.PORT || 3000;
+// // ───────────────── Express 앱 ─────────────────
+// const app = express();
+// const port = process.env.PORT || 3000;
 
-// Swagger 마운트 함수 로드
-const mountSwagger = require('./swagger');
+// // Swagger 마운트 함수 로드
+// const mountSwagger = require('./swagger');
 
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static(uploadDir)); // 정적 경로 유지
+// app.use(cors());
+// app.use(express.json());
+// app.use('/uploads', express.static(uploadDir)); // 정적 경로 유지
 
-// ───────────────── HTTPS 리다이렉트 & 실행 로그 (라우터보다 상단) ─────────────────
-app.set('trust proxy', 1); // Render 프록시 신뢰
-app.use((req, res, next) => {
-  const proto = req.headers['x-forwarded-proto'];
-  if (proto === 'https' || req.secure || !isRender) return next();
-  return res.redirect(`https://${req.headers.host}${req.url}`);
-});
+// // ───────────────── HTTPS 리다이렉트 & 실행 로그 (라우터보다 상단) ─────────────────
+// app.set('trust proxy', 1); // Render 프록시 신뢰
+// app.use((req, res, next) => {
+//   const proto = req.headers['x-forwarded-proto'];
+//   if (proto === 'https' || req.secure || !isRender) return next();
+//   return res.redirect(`https://${req.headers.host}${req.url}`);
+// });
 
-// ───────────────── 라우터 마운트 ─────────────────
-const authRouter = require('./auth')({ pool, upload, openai, uploadDir });
-const exerciseRouter = require('./exercise')({ pool, upload, openai, uploadDir });
-const challengeRouter = require('./challenge')({ pool, upload }); // ✅ 추가
+// // ───────────────── 라우터 마운트 ─────────────────
+// const authRouter = require('./auth')({ pool, upload, openai, uploadDir });
+// const exerciseRouter = require('./exercise')({ pool, upload, openai, uploadDir });
+// const challengeRouter = require('./challenge')({ pool, upload }); // ✅ 추가
 
-app.use(authRouter);
-app.use(exerciseRouter);
-app.use(challengeRouter);
+// app.use(authRouter);
+// app.use(exerciseRouter);
+// app.use(challengeRouter);
 
-// Swagger UI 마운트 (/docs, /openapi.json, /openapi.yaml)
-mountSwagger(app);
+// // Swagger UI 마운트 (/docs, /openapi.json, /openapi.yaml)
+// mountSwagger(app);
 
-console.log("✅ server.js 실행 완료 - 라우터 마운트됨");
+// console.log("✅ server.js 실행 완료 - 라우터 마운트됨");
 
-// Render가 제공하는 외부 URL 또는 PUBLIC_BASE_URL 사용
-const PUBLIC_URL =
-  process.env.RENDER_EXTERNAL_URL ||
-  process.env.PUBLIC_BASE_URL ||
-  `http://0.0.0.0:${port}`;
+// // Render가 제공하는 외부 URL 또는 PUBLIC_BASE_URL 사용
+// const PUBLIC_URL =
+//   process.env.RENDER_EXTERNAL_URL ||
+//   process.env.PUBLIC_BASE_URL ||
+//   `http://0.0.0.0:${port}`;
 
-// 서버 실행
-app.listen(port, "0.0.0.0", () => {
-  console.log("✅ 서버 실행 완료");
-  if (isRender) {
-    console.log(`🌐 외부 접속 주소(HTTPS): ${PUBLIC_URL.replace(/^http:/, 'https:')}`);
-    console.log("ℹ️  HTTP 요청은 자동으로 HTTPS로 리다이렉트됩니다.");
-  } else {
-    console.log(`🚀 로컬 개발 서버: ${PUBLIC_URL}`);
-  }
-});
+// // 서버 실행
+// app.listen(port, "0.0.0.0", () => {
+//   console.log("✅ 서버 실행 완료");
+//   if (isRender) {
+//     console.log(`🌐 외부 접속 주소(HTTPS): ${PUBLIC_URL.replace(/^http:/, 'https:')}`);
+//     console.log("ℹ️  HTTP 요청은 자동으로 HTTPS로 리다이렉트됩니다.");
+//   } else {
+//     console.log(`🚀 로컬 개발 서버: ${PUBLIC_URL}`);
+//   }
+// });
 
 // const express = require('express');
 // const cors = require('cors');
