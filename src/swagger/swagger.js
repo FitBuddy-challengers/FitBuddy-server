@@ -1,4 +1,4 @@
-// swagger.js
+// src/swaagger/swagger.js
 const fs = require('fs');
 const path = require('path');
 const swaggerUi = require('swagger-ui-express');
