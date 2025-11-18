@@ -1,11 +1,14 @@
 // src/swaagger/swagger.js
-const fs = require('fs');
-const path = require('path');
-const swaggerUi = require('swagger-ui-express');
-const YAML = require('yaml');
-const swaggerJSDoc = require('swagger-jsdoc');
+import fs from 'fs';
+import path from 'path';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yaml';
+import swaggerJSDoc from 'swagger-jsdoc';
 
-module.exports = function mountSwagger(app) {
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default function mountSwagger(app) {
   // 1) 우선순위: openapi.yaml 파일이 있으면 그걸 사용
   const yamlPath = path.join(__dirname, 'openapi.yaml');
   let spec = null;
