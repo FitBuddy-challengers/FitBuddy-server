@@ -2,7 +2,8 @@
 
 import {
     getUserInfoService,
-    getMonthlySummaryService
+    getMonthlySummaryService,
+    getAllExercisesService
   } from "../../services/exercise/exerciseAi.service.js";
   
   export default function exerciseAiController({ pool, openai }) {
@@ -142,62 +143,90 @@ import {
           return res.status(500).json({ error: "루틴 생성 실패" });
         }
       },
+
+      
   
       // ───────────────────────────── 추천 운동 ─────────────────────────────
       async recommendExercise(req, res) {
-        const userId = req.body.userId;
+        const { userId, startDate, endDate, days, focusArea } = req.body;
+      
         if (!userId) return res.status(400).json({ error: "userId가 필요합니다." });
-  
+      
         try {
+          // 1) 사용자 정보
           const userInfo = await getUserInfoService(pool, parseInt(userId));
+      
+          // 2) 기존 기록 요약
           const summaryData = await getMonthlySummaryService(pool, parseInt(userId));
           const mostPart = summaryData.mostFrequentPart?.part || "없음";
           const leastPart = summaryData.leastFrequentPart?.part || "없음";
-  
+      
+          // 3) 🔥 DB 운동 목록 가져오기 (핵심)
+          const exerciseList = await getAllExercisesService(pool);
+      
+          // GPT가 보기 좋도록 텍스트로 변환
+          const exerciseText = exerciseList
+            .map((e) => `- ${e.name} (${e.part})`)
+            .join("\n");
+      
+          // 4) GPT 프롬프트 생성
           const prompt = `
-          당신은 전문 퍼스널 트레이너 AI입니다. 아래 정보를 반영하여 추천 운동을 작성해 주세요.
-  
-          [사용자 정보]
-          이름: ${userInfo.name}
-          가장 많이 한 운동 부위: ${mostPart}
-          가장 적게 한 운동 부위: ${leastPart}
-          성별: ${userInfo.gender}
-          키: ${userInfo.height} cm
-          몸무게: ${userInfo.weight} kg
-          지병/부상: ${userInfo.disease}
-          운동 수준: ${userInfo.exercise_level}
-          소유한 운동 기구: ${userInfo.exercise_equipment?.join(', ') || '없음'}
-  
-          [요청 사항]
-          - 반드시 아래 형식을 정확히 지켜 주세요:
-          ${userInfo.name}님은
-          ${mostPart} 운동을 주로 하셨어요.
-          ${leastPart} 운동이 부족한 것 같아요.
-          다음에는 이런 운동 어떠신가요?
-  
-          1. 덤벨 이두 컬 - 이두 강화
-          2. 버피 - 코어 안정성
-          3. 버드독 - 밸런스 및 허리 안정화
-  
-          균형있는 운동은 건강한 몸을 만들어요.
-          새로운 운동에도 도전해 보세요!
+      당신은 전문 퍼스널 트레이너 AI입니다.
+      반드시 아래 DB 운동 목록 안에서만 운동을 선택해서 스케줄을 구성하세요.
+      
+      [운동 DB 목록]
+      ${exerciseText}
+      
+      [사용자 정보]
+      이름: ${userInfo.name}
+      성별: ${userInfo.gender}
+      키: ${userInfo.height} cm
+      몸무게: ${userInfo.weight} kg
+      운동 수준: ${userInfo.exercise_level}
+      지병/부상: ${userInfo.disease}
+      운동 기구: ${userInfo.exercise_equipment?.join(", ") || "없음"}
+      
+      [기록 요약]
+      많이 한 부위: ${mostPart}
+      부족한 부위: ${leastPart}
+      
+      [요청 조건]
+      기간: ${startDate} ~ ${endDate}
+      운동 요일: ${days.join(", ")}
+      집중 부위: ${focusArea}
+      
+      ⚠️ 규칙 (절대 어기지 말 것!)
+      - 운동은 반드시 위 DB 목록에서만 선택
+      - 날짜마다 3~5개 운동 추천
+      - 같은 날 같은 운동 중복 금지
+      - 포맷은 아래처럼 출력:
+      
+      📅 {요일} ({날짜})
+      1. 운동명 - 설명
+      2. 운동명 - 설명
+      3. 운동명 - 설명
           `;
-  
-          const gptResponse = await openai.chat.completions.create({
+      
+          // 5) GPT 호출
+          const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
-              { role: "system", content: "너는 퍼스널 트레이너 역할을 하는 AI야." },
+              { role: "system", content: "너는 한국어 운동 전문 트레이너 AI야. DB 외 운동 사용 금지." },
               { role: "user", content: prompt },
             ],
             temperature: 0.7,
           });
-  
-          const result = gptResponse.choices[0].message.content.trim();
-          res.json({ recommendation: result });
+      
+          const result = completion.choices[0].message.content.trim();
+      
+          return res.json({ recommendation: result });
+      
         } catch (error) {
-          res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
+          console.error(error);
+          return res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
         }
-      },
+      }
+      ,
       
     };
   }
