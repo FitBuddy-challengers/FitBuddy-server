@@ -14,6 +14,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   //const router = Router();
 
   const ai = exerciseAiController({ pool, openai });
+  const consult = exerciseConsultController({ openai });
   const master = masterController({ pool });
   const plan = planController({ pool });
   const today = todayPlanController({ pool });
@@ -30,6 +31,8 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.post("/api/generate-routine", ai.generateRoutine);
   router.post("/api/recommend-exercise", ai.recommendExercise);
   router.get("/api/plan/exists", checkExistingPlanController({ pool }).check);
+
+  router.post("/api/chat/consult", consult.consult);
 
   // 운동 마스터
   router.get("/api/exercises", master.getExercises);
