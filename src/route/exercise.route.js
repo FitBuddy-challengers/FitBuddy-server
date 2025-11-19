@@ -20,6 +20,10 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   const planList = planListController({ pool });
   const submitAi = submitAiController({ pool });
 
+  const reps = repsController({ pool });
+  const time = timeController({ pool });
+
+
   // GPT
   router.post("/api/chat/welcome", ai.welcomeChat);
   router.post("/api/generate-routine", ai.generateRoutine);
