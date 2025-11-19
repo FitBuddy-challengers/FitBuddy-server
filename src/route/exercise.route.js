@@ -1,5 +1,6 @@
 import express from "express";
 import exerciseAiController from "../controller/exercise/exerciseAi.controller.js"; 
+import exerciseAiController from "../controller/exercise/exerciseAi.controller.js"; 
 import masterController from "../controller/exercise/master.controller.js"; 
 import planController from "../controller/exercise/plan.controller.js"; 
 import todayPlanController from "../controller/exercise/todayPlan.controller.js"; 
