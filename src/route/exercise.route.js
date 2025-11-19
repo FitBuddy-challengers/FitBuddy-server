@@ -8,6 +8,7 @@ import planListController from "../controller/exercise/planList.controller.js";
 import repsController from "../controller/exercise/reps.controller.js";
 import timeController from "../controller/exercise/time.controller.js";
 import submitAiController from "../controller/exercise/submitAi.controller.js";
+import checkExistingPlanController from "../controller/exercise/checkExistingPlan.controller.js";
 export default function createExerciseRouter({ pool, upload, openai, uploadDir }) {
   const router = express.Router();
   //const router = Router();
@@ -28,6 +29,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.post("/api/chat/welcome", ai.welcomeChat);
   router.post("/api/generate-routine", ai.generateRoutine);
   router.post("/api/recommend-exercise", ai.recommendExercise);
+  router.get("/api/plan/exists", checkExistingPlanController({ pool }).check);
 
   // 운동 마스터
   router.get("/api/exercises", master.getExercises);

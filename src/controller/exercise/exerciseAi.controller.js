@@ -65,12 +65,16 @@ import {
           - reps: 반복 수 (정수)
         4) 어떤 문장도 JSON 밖에 쓰지 마세요.
 
-        ### 출력 형식 예시 ###
+         ## ⚠️ 출력 규칙 (절대 어기면 안 됨) ##
+        - 출력은 JSON 객체 하나만!
+        - JSON 밖에 텍스트, 설명, 인사말 절대 쓰지 말기
+        - 아래 형식을 그대로 출력
+
         {
-          "routine_text": "오늘도 운동 화이팅🔥 ...",
+          "routine_text": "대화체 설명...",
           "exercises": [
             { "name": "스쿼트", "sets": 3, "reps": 15 },
-            { "name": "런지",   "sets": 3, "reps": 12 }
+            ...
           ]
         }
 
@@ -111,7 +115,9 @@ import {
           - '회', '세트' 단위 붙임  
           - 시간 기반 표현은 사용하지 않기  
   
-        ④ 마지막 문장은 항상 **응원 문장**으로 마무리합니다.  
+        ④ 마지막 문장은 항상 **응원 문장**으로 마무리합니다. 
+        
+        반드시 JSON만 출력하세요. 
         `;
   
         try {
@@ -123,11 +129,22 @@ import {
             ],
             temperature: 0.7,
           });
-  
-          const result = completion.choices[0].message.content;
-          res.json({ plan_text: result.trim() });
+      
+          const raw = completion.choices[0].message.content.trim();
+      
+          try {
+            const parsed = JSON.parse(raw);  // 👈 GPT 답변 JSON 파싱
+            return res.json(parsed);         // 👈 JSON 그대로 반환
+          } catch (err) {
+            console.error("❌ JSON parse 실패:", err);
+            return res.status(400).json({
+              error: "INVALID_JSON",
+              raw  // 디버깅용
+            });
+          }
         } catch (error) {
-          res.status(500).json({ error: "루틴 생성 실패" });
+          console.error("❌ generateRoutine 오류:", error);
+          return res.status(500).json({ error: "루틴 생성 실패" });
         }
       },
   

@@ -91,6 +91,7 @@ export default function submitAiController({ pool }) {
             );
           } else {
             // reps 기반 운동
+            const sets = ex.sets || 1;   // sets 없으면 1세트로 기본값
             for (let i = 1; i <= ex.sets; i++) {
               await client.query(
                 `
@@ -99,7 +100,7 @@ export default function submitAiController({ pool }) {
                 )
                 VALUES ($1, $2, $3, 0, $4, false)
               `,
-                [schedId, exId, i, ex.reps]
+              [schedId, exId, i, ex.reps || 10]   // reps 없으면 기본 10회
               );
             }
           }
