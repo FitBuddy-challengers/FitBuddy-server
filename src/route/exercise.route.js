@@ -1,6 +1,6 @@
 import express from "express";
-import exerciseAiController from "../controller/exercise/exerciseAi.controller.js"; 
-import exerciseAiController from "../controller/exercise/exerciseAi.controller.js"; 
+import exerciseAiController, { exerciseConsultController } 
+  from "../controller/exercise/exerciseAi.controller.js";
 import masterController from "../controller/exercise/master.controller.js"; 
 import planController from "../controller/exercise/plan.controller.js"; 
 import todayPlanController from "../controller/exercise/todayPlan.controller.js"; 
@@ -32,7 +32,6 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.post("/api/generate-routine", ai.generateRoutine);
   router.post("/api/recommend-exercise", ai.recommendExercise);
   router.get("/api/plan/exists", checkExistingPlanController({ pool }).check);
-
   router.post("/api/chat/consult", consult.consult);
 
   // 운동 마스터
