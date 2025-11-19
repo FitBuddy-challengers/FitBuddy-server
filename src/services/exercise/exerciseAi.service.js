@@ -92,4 +92,14 @@ export async function getUserInfoService(pool, userId) {
       mostFrequentExercise: exerciseResult.rows[0] || null
     };
   }
+
+  // DB의 운동 목록 가져오기 (숨김 처리된 운동 제외)
+  export async function getAllExercisesService(pool) {
+    const { rows } = await pool.query(`
+      SELECT id, name, part
+      FROM exercise
+      WHERE is_hidden = false
+    `);
+    return rows;
+  }
   
