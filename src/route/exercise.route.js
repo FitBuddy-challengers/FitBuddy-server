@@ -31,9 +31,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.post("/api/chat/welcome", ai.welcomeChat);
   router.post("/api/generate-routine", ai.generateRoutine);
   router.post("/api/recommend-exercise", ai.recommendExercise);
-  router.get("/api/plan/exists", checkExistingPlanController({ pool }).check);
   router.post("/api/chat/consult", consult.consult);
-
   router.get("/api/check-plan", checkExistingPlanController({ pool }).check);
 
   // 운동 마스터
