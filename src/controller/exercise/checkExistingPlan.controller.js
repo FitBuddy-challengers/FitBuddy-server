@@ -4,7 +4,9 @@
 export default function checkExistingPlanController({ pool }) {
     return {
       async check(req, res) {
-        const { user_id, start_date, end_date } = req.query;
+
+        //기존: start_date, end_date → 변경: date으로 변경함.
+        const { user_id, date } = req.query;
   
         try {
           const result = await pool.query(
@@ -25,7 +27,7 @@ export default function checkExistingPlanController({ pool }) {
             return res.json({ exists: false });
           }
         } catch (err) {
-          console.error("❌ checkExistingPlan error:", err);
+          console.error(" checkExistingPlan error:", err);
           return res.status(500).json({ error: "서버 오류" });
         }
       }
