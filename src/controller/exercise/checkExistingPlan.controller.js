@@ -15,6 +15,7 @@ export default function checkExistingPlanController({ pool }) {
             FROM exercise_plan
             WHERE user_id = $1
             AND $2 BETWEEN start_date AND end_date
+            AND is_dummy = FALSE
             LIMIT 1
           `,
             [user_id, date]
