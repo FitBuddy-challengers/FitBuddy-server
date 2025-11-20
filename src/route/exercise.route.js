@@ -34,6 +34,8 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.get("/api/plan/exists", checkExistingPlanController({ pool }).check);
   router.post("/api/chat/consult", consult.consult);
 
+  router.get("/api/check-plan", checkExistingPlanController({ pool }).check);
+
   // 운동 마스터
   router.get("/api/exercises", master.getExercises);
   router.patch("/api/exercises/:exerciseId/favorite", master.toggleFavorite);
