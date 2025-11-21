@@ -12,7 +12,7 @@ export default function deleteDummyPlanController({ pool }) {
             DELETE FROM exercise_reps 
             WHERE schedule_id IN (
               SELECT id FROM exercise_schedule 
-              WHERE plan_id IN (
+              WHERE exercise_plan_id IN (
                 SELECT id FROM exercise_plan 
                 WHERE user_id = $1 AND is_dummy = TRUE
               )
@@ -24,7 +24,7 @@ export default function deleteDummyPlanController({ pool }) {
             DELETE FROM exercise_time 
             WHERE schedule_id IN (
               SELECT id FROM exercise_schedule 
-              WHERE plan_id IN (
+              WHERE exercise_plan_id IN (
                 SELECT id FROM exercise_plan 
                 WHERE user_id = $1 AND is_dummy = TRUE
               )
@@ -34,7 +34,7 @@ export default function deleteDummyPlanController({ pool }) {
           // schedule 삭제
           await pool.query(`
             DELETE FROM exercise_schedule
-            WHERE plan_id IN (
+            WHERE exercise_plan_id IN (
               SELECT id FROM exercise_plan
               WHERE user_id = $1 AND is_dummy = TRUE
             )
