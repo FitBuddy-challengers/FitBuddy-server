@@ -23,7 +23,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   const today = todayPlanController({ pool });
   const schedule = scheduleController({ pool });
   const planList = planListController({ pool });
-  const submitAi = submitAiController({ pool });
+  const submitAi = submitAiController({ pool, openai });
 
   const reps = repsController({ pool });
   const time = timeController({ pool });
