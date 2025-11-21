@@ -106,9 +106,22 @@ export default function submitAiController({ pool }) {
         return res.json({
           routine_text: "",
           saved_plan_id: planId,
-          schedules: scheduleRows,
-          reps_sets: repsRows,
-          time_sets: timeRows
+          schedules: scheduleRows.map(s => ({
+            id: s.id,
+            exercise_id: s.exercise_id,
+            exercise_order: s.exercise_order
+          })),
+          reps_sets: repsRows.map(r => ({
+            schedule_id: r.schedule_id,
+            set_number: r.set_number,
+            reps: r.reps,
+            weight: r.weight
+          })),
+          time_sets: timeRows.map(t => ({
+            schedule_id: t.schedule_id,
+            set_number: t.set_number,
+            elapsed_time_millis: t.elapsed_time_millis
+          }))
         });
 
       } catch (err) {
