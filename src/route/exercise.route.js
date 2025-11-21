@@ -1,6 +1,5 @@
 import express from "express";
-import exerciseAiController, { exerciseConsultController } 
-  from "../controller/exercise/exerciseAi.controller.js";
+import exerciseAiController, { exerciseConsultController } from "../controller/exercise/exerciseAi.controller.js";
 import masterController from "../controller/exercise/master.controller.js"; 
 import planController from "../controller/exercise/plan.controller.js"; 
 import todayPlanController from "../controller/exercise/todayPlan.controller.js"; 
@@ -24,7 +23,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   const schedule = scheduleController({ pool });
   const planList = planListController({ pool });
   const submitAi = submitAiController({ pool, openai });
-
+  const controller = exerciseAiController({ pool, openai });
   const reps = repsController({ pool });
   const time = timeController({ pool });
 
@@ -32,7 +31,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   // GPT
   router.post("/api/chat/welcome", ai.welcomeChat);
   router.post("/api/generate-routine", ai.generateRoutine);
-  router.post("/api/recommend-exercise", ai.recommendExercise);
+  router.post("/api/recommend-exercise", controller.recommendExercise);
   router.post("/api/chat/consult", consult.consult);
   router.get("/api/check-plan", checkExistingPlanController({ pool }).check);
 
