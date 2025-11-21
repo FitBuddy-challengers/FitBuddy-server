@@ -10,6 +10,8 @@ import repsController from "../controller/exercise/reps.controller.js";
 import timeController from "../controller/exercise/time.controller.js";
 import submitAiController from "../controller/exercise/submitAi.controller.js";
 import checkExistingPlanController from "../controller/exercise/checkExistingPlan.controller.js";
+import deleteDummyPlanController from "../controller/exercise/deleteDummyPlan.controller.js";
+
 export default function createExerciseRouter({ pool, upload, openai, uploadDir }) {
   const router = express.Router();
   //const router = Router();
@@ -33,6 +35,10 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.post("/api/recommend-exercise", ai.recommendExercise);
   router.post("/api/chat/consult", consult.consult);
   router.get("/api/check-plan", checkExistingPlanController({ pool }).check);
+
+
+  //더미 스케줄 제거
+  router.delete("/api/dummy-plan", deleteDummyPlanController({ pool }).deleteDummy);
 
   // 운동 마스터
   router.get("/api/exercises", master.getExercises);
