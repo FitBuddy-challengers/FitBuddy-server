@@ -148,24 +148,42 @@ import {
   
       // ───────────────────────────── 추천 운동 ─────────────────────────────
       async recommendExercise(req, res) {
-        const { userId, startDate, endDate, days, focusArea } = req.body;
-      
-        if (!userId) return res.status(400).json({ error: "userId가 필요합니다." });
-      
-        try {
-          // 1) 사용자 정보
-          const userInfo = await getUserInfoService(pool, parseInt(userId));
-      
-          // 2) 기존 기록 요약
-          const summaryData = await getMonthlySummaryService(pool, parseInt(userId));
-          const mostPart = summaryData.mostFrequentPart?.part || "없음";
-          const leastPart = summaryData.leastFrequentPart?.part || "없음";
-      
-          // 3) 🔥 DB 운동 목록 가져오기 (핵심)
-          const exerciseList = await getAllExercisesService(pool);
-          const exerciseText = exerciseList
-            .map((e) => `- ${e.name} (${e.part})`)
-            .join("\n");
+
+         // API 호출 로그
+      console.log("[recommendExercise] req.body =", req.body);
+
+      const { userId, startDate, endDate, days, focusArea } = req.body;
+
+      if (!userId) {
+        console.log("[recommendExercise] userId 없음");
+        return res.status(400).json({ error: "userId가 필요합니다." });
+      }
+
+      try {
+        // 1) 사용자 정보
+        console.log("[recommendExercise] 사용자 정보 조회");
+        const userInfo = await getUserInfoService(pool, parseInt(userId));
+        console.log("[recommendExercise] userInfo =", userInfo);
+
+        // 2) 기존 기록 요약
+        console.log("[recommendExercise] 월간 기록 요약 조회");
+        const summaryData = await getMonthlySummaryService(pool, parseInt(userId));
+        console.log("[recommendExercise] summaryData =", summaryData);
+
+        const mostPart = summaryData?.mostFrequentPart?.part || "없음";
+        const leastPart = summaryData?.leastFrequentPart?.part || "없음";
+
+        // 3) 운동 DB 목록
+        console.log("[recommendExercise] 운동 DB 가져오기");
+        const exerciseList = await getAllExercisesService(pool);
+        console.log("[recommendExercise] exerciseList length =", exerciseList.length);
+
+        const exerciseText = exerciseList
+          .map((e) => `- ${e.name} (${e.part})`)
+          .join("\n");
+
+        // 4) GPT 프롬프트 생성
+        console.log("[recommendExercise] GPT 프롬프트 생성");
       
           // 4) GPT 프롬프트 생성
           const prompt = `
@@ -229,15 +247,19 @@ import {
             temperature: 0.7,
           });
       
-          const result = completion.choices[0].message.content.trim();
-      
-          return res.json({ recommendation: result });
-      
-        } catch (error) {
-          console.error(error);
-          return res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
-        }
+          console.log("[recommendExercise] GPT 응답 수신");
+
+        const result = completion.choices[0].message.content.trim();
+
+        console.log("[recommendExercise] GPT result =", result);
+
+        return res.json({ recommendation: result });
+
+      } catch (error) {
+        console.error("[recommendExercise] 오류 발생:", error);
+        return res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
       }
+}
       ,
       
     };
