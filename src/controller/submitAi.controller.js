@@ -7,16 +7,9 @@ export default function submitAiController({ pool }) {
   
         try {
   
-          // 🔥 1) 플랜 저장 전에 더미 기록 삭제
-          await pool.query(
-            `DELETE FROM exercise_plan
-             WHERE user_id = $1
-             AND is_dummy = TRUE`,
-            [user_id]
-          );
   
-          // 🔥 2) 이후 새 플랜 저장 (네 기존 코드 그대로)
-          // ... (원래 있던 플랜 생성/스케줄 생성 코드)
+          //  새 플랜 저장 (네 기존 코드 그대로)
+          //  (원래 있던 플랜 생성/스케줄 생성 코드)
   
           return res.json({ success: true });
         } catch (err) {
