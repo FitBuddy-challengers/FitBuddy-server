@@ -8,7 +8,7 @@ import scheduleController from "../controller/exercise/schedule.controller.js";
 import planListController from "../controller/exercise/planList.controller.js";
 import repsController from "../controller/exercise/reps.controller.js";
 import timeController from "../controller/exercise/time.controller.js";
-import submitAiController from "../controller/exercise/submitAi.controller.js";
+import submitAiController from "../../controller/exercise/submitAi.controller.js";
 import checkExistingPlanController from "../controller/exercise/checkExistingPlan.controller.js";
 import deleteDummyPlanController from "../controller/exercise/deleteDummyPlan.controller.js";
 
