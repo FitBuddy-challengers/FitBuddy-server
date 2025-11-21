@@ -163,8 +163,6 @@ import {
       
           // 3) 🔥 DB 운동 목록 가져오기 (핵심)
           const exerciseList = await getAllExercisesService(pool);
-      
-          // GPT가 보기 좋도록 텍스트로 변환
           const exerciseText = exerciseList
             .map((e) => `- ${e.name} (${e.part})`)
             .join("\n");
@@ -176,6 +174,20 @@ import {
       
       [운동 DB 목록]
       ${exerciseText}
+
+      
+      위 운동 목록에 있는 운동만으로 스케줄을 구성하되,
+      운동은 반드시 JSON으로 반환하세요.
+
+      ⚠️ 출력 형식
+      {
+        "routine_text": "사용자에게 보여줄 간단한 설명",
+        "exercises": [
+          { "name": "스쿼트", "sets": 3, "reps": 12 },
+          { "name": "푸시업", "sets": 2, "reps": 15 },
+          { "name": "플랭크", "seconds": 60 }
+        ]
+      }
       
       [사용자 정보]
       이름: ${userInfo.name}
