@@ -247,19 +247,39 @@ import {
             temperature: 0.7,
           });
       
-          console.log("[recommendExercise] GPT 응답 수신");
+          let result = completion.choices[0].message.content.trim();
+          console.log("[recommendExercise] GPT result raw=", result);
 
-        const result = completion.choices[0].message.content.trim();
+          // GPT 출력에서 JSON만 추출
+          let jsonStart = result.indexOf("{");
+          let jsonEnd = result.lastIndexOf("}");
+          if (jsonStart === -1 || jsonEnd === -1) {
+            return res.status(400).json({ error: "JSON 형태가 아닙니다.", raw: result });
+          }
 
-        console.log("[recommendExercise] GPT result =", result);
+          let jsonString = result.substring(jsonStart, jsonEnd + 1);
 
-        return res.json({ recommendation: result });
+          let parsed;
+          try {
+            parsed = JSON.parse(jsonString);
+          } catch (err) {
+            console.error("[recommendExercise] JSON 파싱 실패:", err);
+            return res.status(400).json({ error: "INVALID_JSON", raw: jsonString });
+          }
 
-      } catch (error) {
-        console.error("[recommendExercise] 오류 발생:", error);
-        return res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
+          console.log("[recommendExercise] parsed =", parsed);
+
+          // 🔥 안드가 원하는 구조로 응답!
+          return res.json({
+            routine_text: parsed.routine_text,
+            exercises: parsed.exercises,
+          });
+
+        } catch (error) {
+          console.error("[recommendExercise] 오류 발생:", error);
+          return res.status(500).json({ error: "추천 생성 중 서버 오류가 발생했습니다." });
+        }
       }
-}
       ,
       
     };
