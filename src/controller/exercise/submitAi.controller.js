@@ -25,13 +25,18 @@ export default function submitAiController({ pool }) {
           [user_id, start_date, end_date]
         );
 
+        // 요일 매핑
+        const dayMap = { "월":1, "화":2, "수":3, "목":4, "금":5, "토":6, "일":7 };
+
+        const numericDays = days.map(d => dayMap[d]);
+
         // 새 플랜 생성
         const planResult = await client.query(
           `INSERT INTO exercise_plan (
             user_id, start_date, end_date, day, day_pattern, is_dummy
           ) VALUES ($1,$2,$3,$4,$5,false)
           RETURNING id`,
-          [user_id, start_date, end_date, days, [focus_area]]
+          [user_id, start_date, end_date, numericDays, [focus_area]]
         );
 
         const planId = planResult.rows[0].id;
