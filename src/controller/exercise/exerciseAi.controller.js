@@ -299,9 +299,12 @@ import {
       async exerciseAdvice(req, res) {
 
         console.log(" [exerciseAdvice] req.body =", req.body);
+
+        const userId = req.body.userId || req.body.user_id;
+
         console.log(" [exerciseAdvice] typeof userId =", typeof req.body?.userId);
 
-        const { userId } = req.body;
+        
       
         if (!userId) {
           return res.status(400).json({ error: "userId가 필요합니다." });
