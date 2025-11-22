@@ -1,10 +1,16 @@
+import moment from "moment-timezone";
+
+
 export default function todayPlanController({ pool }) {
     return {
       async getTodayPlan(req, res) {
         const userId = parseInt(req.query.userId);
         if (!userId) return res.status(400).json({ message: "userId가 필요합니다." });
   
-        const today = new Date().toISOString().split("T")[0];
+         // 한국 기준 날짜로 변경
+          const today = moment().tz("Asia/Seoul").format("YYYY-MM-DD");
+          console.log("📅 오늘(KST):", today);
+
   
         try {
           const planResult = await pool.query(
