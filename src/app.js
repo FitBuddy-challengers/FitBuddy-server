@@ -17,6 +17,7 @@ import authRouter from "./controller/auth.controller.js";
 import challengeRouter from "./controller/challenge.controller.js";
 // import exerciseRoute from "./route/exercise.route.js";
 import exerciseRoute from "./route/exercise.route.js";
+import recordsRoute from "./route/records.route.js";
 
 const __dirname = path.resolve();
 
@@ -92,6 +93,7 @@ app.use(authRouter({ pool, upload, openai, uploadDir }));
 app.use(exerciseRoute({ pool, upload, openai, uploadDir }));
 //app.use(exerciseRouter({ pool, upload, openai, uploadDir }));
 app.use(challengeRouter({ pool, upload }));
+app.use("/api/records", recordsRoute({ pool }));
 
 // Swagger 마운트
 mountSwagger(app);
