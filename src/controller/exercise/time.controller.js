@@ -115,30 +115,49 @@ export default function timeController({ pool }) {
                   elapsedTimeMillis
               ]);
 
-              if (result.rowCount > 0) {
-                  await client.query("COMMIT");
-                  console.log(`TIME 완료 scheduleId=${scheduleId}, set=${setNumber}`);
-                  return res.status(200).json({
-                      message: "TIME 세트 완료 상태 성공적으로 업데이트"
-                  });
-              } else {
-                  await client.query("ROLLBACK");
-                  console.warn(`⚠️ TIME 세트 찾지 못함 scheduleId=${scheduleId} set=${setNumber}`);
-                  return res.status(404).json({
-                      message: `TIME 세트 scheduleId=${scheduleId} set=${setNumber} 찾을 수 없음`
-                  });
+              if (result.rowCount === 0) {
+                await client.query("ROLLBACK");
+                return res.status(404).json({
+                  message: `TIME 세트 scheduleId=${scheduleId} set=${setNumber} 찾을 수 없음`
+                });
               }
-          } catch (err) {
-              await client.query("ROLLBACK");
-              console.error("TIME 완료 처리 실패:", err);
-              return res.status(500).json({
-                  error: "TIME 완료 처리 중 오류",
-                  detail: err.message
+          
+             
+              // exercise_schedule.is_completed 갱신을 위해 필요
+              const checkAll = await client.query(
+                `SELECT bool_and(is_completed) AS all_done
+                 FROM exercise_time
+                 WHERE schedule_id = $1`,
+                [scheduleId]
+              );
+          
+              const allCompleted = checkAll.rows[0].all_done === true;
+          
+              
+              // 시간 운동 전체 완료 여부를 스케줄 테이블에 반영
+              await client.query(
+                `UPDATE exercise_schedule
+                 SET is_completed = $1
+                 WHERE id = $2`,
+                [allCompleted, scheduleId]
+              );
+              
+          
+              await client.query("COMMIT");
+              return res.status(200).json({
+                message: "TIME 세트 및 스케줄 완료 상태 업데이트됨"
               });
-          } finally {
+          
+            } catch (err) {
+              await client.query("ROLLBACK");
+              return res.status(500).json({
+                error: "TIME 완료 처리 중 오류",
+                detail: err.message
+              });
+            } finally {
               client.release();
+            }
           }
-      }
 
 
     };
