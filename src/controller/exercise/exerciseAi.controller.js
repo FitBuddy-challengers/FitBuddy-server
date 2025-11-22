@@ -182,6 +182,18 @@ import {
           .map((e) => `- ${e.name} (${e.part})`)
           .join("\n");
 
+        // 안전 처리
+        const safeEquipment = Array.isArray(userInfo.exercise_equipment)
+        ? userInfo.exercise_equipment.join(", ")
+        : (userInfo.exercise_equipment || "없음");
+
+        const safeDays = Array.isArray(days)
+        ? days.join(", ")
+        : "없음";
+
+        const safeDisease = userInfo.disease || "없음";
+        const safeLevel = userInfo.exercise_level || "중";
+
         // 4) GPT 프롬프트 생성
         console.log("[recommendExercise] GPT 프롬프트 생성");
       
@@ -214,16 +226,17 @@ import {
       몸무게: ${userInfo.weight} kg
       운동 수준: ${userInfo.exercise_level}
       지병/부상: ${userInfo.disease}
-      운동 기구: ${userInfo.exercise_equipment?.join(", ") || "없음"}
+      운동 기구: ${safeEquipment}
       
       [기록 요약]
       많이 한 부위: ${mostPart}
       부족한 부위: ${leastPart}
       
       [요청 조건]
-      기간: ${startDate} ~ ${endDate}
-      운동 요일: ${days.join(", ")}
-      집중 부위: ${focusArea}
+      기간: ${startDate || "미정"} ~ ${endDate || "미정"}
+      운동 요일: ${safeDays}
+      집중 부위: ${focusArea || "무관"}
+
       
       ⚠️ 규칙 (절대 어기지 말 것!)
       - 운동은 반드시 위 DB 목록에서만 선택
