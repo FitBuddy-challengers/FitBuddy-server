@@ -297,6 +297,10 @@ import {
       }
       ,
       async exerciseAdvice(req, res) {
+
+        console.log(" [exerciseAdvice] req.body =", req.body);
+        console.log(" [exerciseAdvice] typeof userId =", typeof req.body?.userId);
+
         const { userId } = req.body;
       
         if (!userId) {
