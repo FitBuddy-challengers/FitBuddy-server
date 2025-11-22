@@ -296,6 +296,61 @@ import {
         }
       }
       ,
+      async exerciseAdvice(req, res) {
+        const { userId } = req.body;
+      
+        if (!userId) {
+          return res.status(400).json({ error: "userId가 필요합니다." });
+        }
+      
+        try {
+          // 1) 지난 기록 불러오기
+          const summary = await getMonthlySummaryService(pool, userId);
+      
+          const most = summary?.mostFrequentPart?.part || "없음";
+          const least = summary?.leastFrequentPart?.part || "없음";
+      
+          // 2) GPT 프롬프트 구성
+          const prompt = `
+          당신은 전문 퍼스널 트레이너이자 운동 분석 전문가입니다.
+          아래 사용자의 한 달 운동 데이터를 바탕으로 트레이너가 직접 코칭하듯,
+          구체적이고 전문적인 분석 + 현실적인 조언을 3~4문장으로 작성하세요.
+
+          ### 출력 규칙
+          - 문장만 출력 (JSON, 목록, 번호 금지)
+          - 사용자 이름 언급 금지
+          - 과한 표현, 유튜브식 자극적인 말투 금지
+          - 너무 과학 용어 남발 금지 (일반인 이해 수준)
+          - 실제 PT 트레이너가 회원에게 말하듯 "따뜻하지만 단호"한 톤
+          - 운동 부위 간 불균형, 부족한 패턴, 개선 전략을 하나 이상 반드시 포함
+
+          ### 사용자 최근 운동 패턴
+          - 가장 많이 한 부위: ${most}
+          - 가장 적게 한 부위: ${least}
+
+          ### 조언 가이드
+          - 특정 부위에 치우친 패턴 → 왜 문제가 되는지 간단히 설명
+          - 보완해야 하는 부위 → 어떤 종류의 운동이 필요한지 조언
+          - 앞으로의 루틴 방향 제안
+          - 실천 가능한 한 가지 팁 포함
+          `;
+      
+          const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+            max_tokens: 120
+          });
+      
+          const advice = completion.choices[0].message.content.trim();
+      
+          return res.json({ advice });
+      
+        } catch (err) {
+          console.error("exerciseAdvice error:", err);
+          return res.status(500).json({ error: "AI 조언 생성 실패" });
+        }
+      }
       
     };
   }
