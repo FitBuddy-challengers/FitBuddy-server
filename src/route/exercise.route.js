@@ -72,11 +72,12 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.get("/api/reps-sets/:scheduleId", reps.getRepsSets);
   router.patch("/api/schedule/:scheduleId/reps-sets", reps.saveRepsSets);
   router.patch("/api/sets/reps/complete", reps.completeReps);
+  
 
   // TIME
   router.get("/api/schedule/:scheduleId/time-sets", time.getTimeSets);
   router.patch("/api/schedule/:scheduleId/time-sets", time.saveTimeSets);
-
+  router.post("/api/sets/time/complete", time.completeTime);
   router.post("/api/plan/submit-ai", submitAi.submitAi);
   return router;
 }

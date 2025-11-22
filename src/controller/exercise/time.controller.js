@@ -81,6 +81,66 @@ export default function timeController({ pool }) {
         } finally {
           client.release();
         }
+      },
+         // TIME 세트 완료/업데이트 (★ 새로 추가된 기능)
+         async completeTime(req, res) {
+          const { scheduleId, setNumber, isCompleted, elapsedTimeMillis } = req.body;
+
+          if (
+              typeof scheduleId === "undefined" ||
+              typeof setNumber === "undefined" ||
+              typeof isCompleted !== "boolean"
+          ) {
+              return res.status(400).json({
+                  message: "잘못된 입력: scheduleId, setNumber 필요, isCompleted는 boolean"
+              });
+          }
+
+          const client = await pool.connect();
+          try {
+              await client.query("BEGIN");
+
+              const sql = `
+                  UPDATE exercise_time
+                  SET is_completed = $1,
+                      elapsed_time_millis = COALESCE($4, elapsed_time_millis)
+                  WHERE schedule_id = $2 AND set_number = $3
+              `;
+
+              const result = await client.query(sql, [
+                  isCompleted,
+                  scheduleId,
+                  setNumber,
+                  elapsedTimeMillis
+              ]);
+
+              if (result.rowCount > 0) {
+                  await client.query("COMMIT");
+                  console.log(`TIME 완료 scheduleId=${scheduleId}, set=${setNumber}`);
+                  return res.status(200).json({
+                      message: "TIME 세트 완료 상태 성공적으로 업데이트"
+                  });
+              } else {
+                  await client.query("ROLLBACK");
+                  console.warn(`⚠️ TIME 세트 찾지 못함 scheduleId=${scheduleId} set=${setNumber}`);
+                  return res.status(404).json({
+                      message: `TIME 세트 scheduleId=${scheduleId} set=${setNumber} 찾을 수 없음`
+                  });
+              }
+          } catch (err) {
+              await client.query("ROLLBACK");
+              console.error("TIME 완료 처리 실패:", err);
+              return res.status(500).json({
+                  error: "TIME 완료 처리 중 오류",
+                  detail: err.message
+              });
+          } finally {
+              client.release();
+          }
       }
+
+
     };
   }
+
+  
