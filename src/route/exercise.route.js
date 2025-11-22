@@ -15,7 +15,7 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   const router = express.Router();
   //const router = Router();
 
-  const ai = exerciseAiController({ pool, openai });
+  
   const consult = exerciseConsultController({ openai });
   const master = masterController({ pool });
   const plan = planController({ pool });
@@ -29,8 +29,8 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
 
 
   // GPT
-  router.post("/api/chat/welcome", ai.welcomeChat);
-  router.post("/api/generate-routine", ai.generateRoutine);
+  router.post("/api/chat/welcome", controller.welcomeChat);
+  router.post("/api/generate-routine", controller.generateRoutine);
   router.post("/api/recommend-exercise", controller.recommendExercise);
   router.post("/api/chat/consult", consult.consult);
   router.get("/api/check-plan", checkExistingPlanController({ pool }).check);
@@ -72,6 +72,9 @@ export default function createExerciseRouter({ pool, upload, openai, uploadDir }
   router.get("/api/reps-sets/:scheduleId", reps.getRepsSets);
   router.patch("/api/schedule/:scheduleId/reps-sets", reps.saveRepsSets);
   router.patch("/api/sets/reps/complete", reps.completeReps);
+
+  //기록 분석
+  router.post("/api/exercise-advice", controller.exerciseAdvice);
   
 
   // TIME
