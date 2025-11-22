@@ -16,7 +16,8 @@ export default function timeController({ pool }) {
           const sets = result.rows.map((row) => ({
             set_number: row.set_number,
             seconds: Math.floor(row.elapsed_time_millis / 1000),
-            weight: row.weight
+            weight: row.weight,
+            is_completed: row.is_completed  
           }));
   
           console.log(`ℹ️ TIME 세트 조회 scheduleId=${scheduleId}`);
