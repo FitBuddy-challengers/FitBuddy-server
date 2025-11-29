@@ -166,6 +166,19 @@ export function getMonthlyPhotos(pool, userId, year, month) {
   );
 }
 
+export function getWeeklyPhotos(pool, userId, startDate) {
+  return pool.query(
+    `SELECT 
+        to_char(created_at, 'YYYY-MM-DD') AS date,
+        image_url
+     FROM photo_challenges
+     WHERE user_id = $1
+       AND created_at BETWEEN $2::date AND ($2::date + INTERVAL '6 day')
+     ORDER BY created_at ASC`,
+    [userId, startDate]
+  );
+}
+
 // -----------------------------
 // 코인 및 보상 정산
 // -----------------------------
