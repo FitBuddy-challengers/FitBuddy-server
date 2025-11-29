@@ -119,7 +119,7 @@ export function updateUserLevel(pool, userId, level) {
 export function findExistingPhoto(pool, userId, date) {
   return pool.query(
     `SELECT id FROM photo_challenges
-     WHERE user_id = $1 AND created_at = $2`,
+     WHERE user_id = $1 AND DATE(created_at) = $2`,
     [userId, date]
   );
 }
@@ -128,7 +128,7 @@ export function updatePhoto(pool, userId, date, imageUrl) {
   return pool.query(
     `UPDATE photo_challenges
      SET image_url = $1
-     WHERE user_id = $2 AND created_at = $3`,
+     WHERE user_id = $2 AND DATE(created_at) = $3`,
     [imageUrl, userId, date]
   );
 }
@@ -150,25 +150,19 @@ export function increasePhotoCount(pool, userId) {
   );
 }
 
+
+
 export function getMonthlyPhotos(pool, userId, year, month) {
   return pool.query(
-    `SELECT DISTINCT to_char(created_at, 'YYYY-MM-DD') AS date
+    `SELECT 
+        to_char(created_at, 'YYYY-MM-DD') AS date,
+        image_url
      FROM photo_challenges
      WHERE user_id = $1
        AND EXTRACT(YEAR FROM created_at) = $2
        AND EXTRACT(MONTH FROM created_at) = $3
-     ORDER BY date ASC`,
+     ORDER BY created_at ASC`,
     [userId, year, month]
-  );
-}
-
-export function getWeeklyPhotos(pool, userId, startDate) {
-  return pool.query(
-    `SELECT to_char(created_at, 'YYYY-MM-DD') AS date, image_url
-     FROM photo_challenges
-     WHERE user_id = $1
-       AND created_at BETWEEN $2::date AND $2::date + 6`,
-    [userId, startDate]
   );
 }
 
