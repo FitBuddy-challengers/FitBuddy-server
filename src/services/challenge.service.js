@@ -198,18 +198,46 @@ import {
   
     return { success: true, updatedCoin: newCoin };
   }
-  
-  
+
   // ------------------------------------------------------------
-  //  사진 기록 조회
+  //  월간 사진 인증 기록 조회 (절대 URL 변환)
   // ------------------------------------------------------------
   export async function getMonthlyRecord(pool, userId, year, month) {
-    return getMonthlyPhotos(pool, userId, year, month);
+    const result = await getMonthlyPhotos(pool, userId, year, month);
+
+    return {
+      rows: result.rows.map(r => ({
+        ...r,
+        image_url: `${process.env.BASE_URL}${r.image_url}`
+      }))
+    };
+  }
+
+  // ------------------------------------------------------------
+  //  주간 사진 인증 기록 조회 (절대 URL 변환)
+  // ------------------------------------------------------------
+  export async function getWeeklyRecord(pool, userId, startDate) {
+    const result = await getWeeklyPhotos(pool, userId, startDate);
+
+    return {
+      rows: result.rows.map(r => ({
+        ...r,
+        image_url: `${process.env.BASE_URL}${r.image_url}`
+      }))
+    };
   }
   
-  export async function getWeeklyRecord(pool, userId, startDate) {
-    return getWeeklyPhotos(pool, userId, startDate);
-  }
+  
+  // // ------------------------------------------------------------
+  // //  사진 기록 조회
+  // // ------------------------------------------------------------
+  // export async function getMonthlyRecord(pool, userId, year, month) {
+  //   return getMonthlyPhotos(pool, userId, year, month);
+  // }
+  
+  // export async function getWeeklyRecord(pool, userId, startDate) {
+  //   return getWeeklyPhotos(pool, userId, startDate);
+  // }
   
   
   // ------------------------------------------------------------
