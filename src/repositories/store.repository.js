@@ -1,8 +1,8 @@
 // src/repositories/store.repository.js
-const pool = require("../config/db");
+
 
 // 소유 아이템 목록 조회
-exports.findOwnedItems = async (userId) => {
+export const findOwnedItems = async (pool, userId) => {
     const result = await pool.query(
         "SELECT item_id FROM user_owned_items WHERE user_id = $1",
         [userId]
@@ -11,7 +11,7 @@ exports.findOwnedItems = async (userId) => {
 };
 
 // 특정 아이템 정보 조회
-exports.findItemById = async (itemId) => {
+export const findItemById = async (pool, itemId) => {
     const result = await pool.query(
         "SELECT id, price, required_level FROM items WHERE id = $1",
         [itemId]
@@ -19,8 +19,8 @@ exports.findItemById = async (itemId) => {
     return result.rows[0];
 };
 
-// 유저 정보 조회
-exports.findUserForUpdate = async (client, userId) => {
+// 유저 정보 조회 (FOR UPDATE)
+export const findUserForUpdate = async (client, userId) => {
     const result = await client.query(
         "SELECT id, level, coin FROM users WHERE id = $1 FOR UPDATE",
         [userId]
@@ -29,7 +29,7 @@ exports.findUserForUpdate = async (client, userId) => {
 };
 
 // 이미 소유한 아이템인지 확인
-exports.checkOwned = async (client, userId, itemId) => {
+export const checkOwned = async (client, userId, itemId) => {
     const result = await client.query(
         "SELECT 1 FROM user_owned_items WHERE user_id = $1 AND item_id = $2",
         [userId, itemId]
@@ -38,7 +38,7 @@ exports.checkOwned = async (client, userId, itemId) => {
 };
 
 // 코인 업데이트
-exports.updateUserCoin = async (client, userId, newCoin) => {
+export const updateUserCoin = async (client, userId, newCoin) => {
     await client.query(
         "UPDATE users SET coin = $1 WHERE id = $2",
         [newCoin, userId]
@@ -46,7 +46,7 @@ exports.updateUserCoin = async (client, userId, newCoin) => {
 };
 
 // 아이템 소유 등록
-exports.insertOwnedItem = async (client, userId, itemId) => {
+export const insertOwnedItem = async (client, userId, itemId) => {
     await client.query(
         "INSERT INTO user_owned_items (user_id, item_id) VALUES ($1, $2)",
         [userId, itemId]
