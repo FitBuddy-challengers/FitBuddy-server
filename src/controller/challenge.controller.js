@@ -53,7 +53,7 @@ export default ({ pool, upload }) => {
   // -----------------------------------------------------
   router.get("/api/user-challenge-progress/:userId", async (req, res) => {
     const userId = parseUserId(req);
-
+  
     try {
       const user = await pool.query(
         "SELECT id, level, coin FROM users WHERE id = $1",
@@ -61,55 +61,76 @@ export default ({ pool, upload }) => {
       );
       if (!user.rows.length)
         return res.status(404).json({ message: "User not found" });
-
+  
       const progress = await pool.query(
         `SELECT attendance_count, photo_count, exercise_count, last_attendance_date
          FROM user_challenge_progress WHERE user_id = $1`,
         [userId]
       );
-
+  
       const level = user.rows[0].level ?? 1;
-
+  
+      // 레벨 요구치 + 보상 조회
       const reqRes = await pool.query(
-        `SELECT required_attendance, required_photo, required_exercise
+        `SELECT required_attendance, required_photo, required_exercise,
+                reward_attendance, reward_photo, reward_exercise
          FROM challenge_level WHERE level = $1`,
         [level]
       );
-
+  
       const reqs = reqRes.rows[0] ?? {
         required_attendance: 0,
         required_photo: 0,
-        required_exercise: 0
+        required_exercise: 0,
+        reward_attendance: 0,
+        reward_photo: 0,
+        reward_exercise: 0
       };
-
+  
       const p = progress.rows[0] ?? {
         attendance_count: 0,
         photo_count: 0,
         exercise_count: 0,
         last_attendance_date: null
       };
-
+  
       const pct = (num, den) =>
         den > 0 ? Math.min(100, Math.floor((num * 100) / den)) : 0;
-
+  
       res.json({
         user_id: userId,
-        level,
+        level: level,
         coin: user.rows[0].coin ?? 0,
+  
+        // 앱 DTO에 맞게 변경됨
+        required: {
+          attendance: reqs.required_attendance,
+          photo: reqs.required_photo,
+          exercise: reqs.required_exercise
+        },
+  
         counts: {
           attendance: p.attendance_count,
           photo: p.photo_count,
           exercise: p.exercise_count
         },
-        required: reqs,
+  
         progress_percent: {
-          attendance: pct(p.attendance_count, reqs.required_attendance),
-          photo: pct(p.photo_count, reqs.required_photo),
-          exercise: pct(p.exercise_count, reqs.required_exercise)
+          attendancePercent: pct(p.attendance_count, reqs.required_attendance),
+          photoPercent: pct(p.photo_count, reqs.required_photo),
+          exercisePercent: pct(p.exercise_count, reqs.required_exercise)
         },
+  
+        reward: {
+          attendance: reqs.reward_attendance,
+          photo: reqs.reward_photo,
+          exercise: reqs.reward_exercise
+        },
+  
         last_attendance_date: p.last_attendance_date
       });
     } catch (err) {
+      console.error(err);
       res.status(500).json({ message: "server error" });
     }
   });

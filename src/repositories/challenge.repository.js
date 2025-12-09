@@ -174,7 +174,7 @@ export function getWeeklyPhotos(pool, userId, startDate) {
      FROM photo_challenges
      WHERE user_id = $1
        AND created_at BETWEEN $2::date AND ($2::date + INTERVAL '6 day')
-     ORDER BY created_at ASC`,
+     ORDER BY created_at ASC`,   // ← 오래된 게 앞!
     [userId, startDate]
   );
 }
