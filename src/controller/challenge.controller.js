@@ -199,6 +199,7 @@ export default ({ pool, upload }) => {
         await client.query("BEGIN");
 
         const result = await claimReward(client, userId, challengeType);
+        
 
         if (!result.success) {
           await client.query("ROLLBACK");
@@ -206,6 +207,9 @@ export default ({ pool, upload }) => {
             .status(400)
             .json({ success: false, message: result.message });
         }
+
+        // 레벨업 체크 
+        await checkAndUpdateLevel(client, userId);
 
         await client.query("COMMIT");
 
