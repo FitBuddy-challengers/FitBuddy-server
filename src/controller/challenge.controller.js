@@ -198,8 +198,11 @@ export default ({ pool, upload }) => {
       try {
         await client.query("BEGIN");
 
+        // 1) 먼저 레벨업 체크 (카운트 깎이기 전에)
+        await checkAndUpdateLevel(client, userId);
+
+        // 2) 그다음 보상 처리
         const result = await claimReward(client, userId, challengeType);
-        
 
         if (!result.success) {
           await client.query("ROLLBACK");
@@ -207,9 +210,6 @@ export default ({ pool, upload }) => {
             .status(400)
             .json({ success: false, message: result.message });
         }
-
-        // 레벨업 체크 
-        await checkAndUpdateLevel(client, userId);
 
         await client.query("COMMIT");
 

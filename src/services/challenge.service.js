@@ -16,6 +16,7 @@ import {
     // 레벨업
     getUserLevel,
     updateUserLevel,
+    checkAndUpdateLevel,
   
     // 사진 인증
     findExistingPhoto,
@@ -53,32 +54,32 @@ import {
   // ------------------------------------------------------------
   //  레벨업
   // ------------------------------------------------------------
-  export async function checkAndUpdateLevel(db, userId) {
-    // db 는 pool 또는 client 둘 다 가능함
+  // export async function checkAndUpdateLevel(db, userId) {
+  //   // db 는 pool 또는 client 둘 다 가능함
   
-    const progress = await getUserChallengeProgress(db, userId);
-    const userInfo = await getUserLevel(db, userId);
+  //   const progress = await getUserChallengeProgress(db, userId);
+  //   const userInfo = await getUserLevel(db, userId);
   
-    if (!progress.rows.length || !userInfo.rows.length) return;
+  //   if (!progress.rows.length || !userInfo.rows.length) return;
   
-    const currentLevel = userInfo.rows[0].level;
-    const nextLevel = currentLevel + 1;
+  //   const currentLevel = userInfo.rows[0].level;
+  //   const nextLevel = currentLevel + 1;
   
-    const req = await getLevelRequirement(db, nextLevel);
-    if (!req.rows.length) return;
+  //   const req = await getLevelRequirement(db, nextLevel);
+  //   if (!req.rows.length) return;
   
-    const p = progress.rows[0];
-    const r = req.rows[0];
+  //   const p = progress.rows[0];
+  //   const r = req.rows[0];
   
-    const canLevelUp =
-      p.attendance_count >= r.required_attendance &&
-      p.photo_count >= r.required_photo &&
-      p.exercise_count >= r.required_exercise;
+  //   const canLevelUp =
+  //     p.attendance_count >= r.required_attendance &&
+  //     p.photo_count >= r.required_photo &&
+  //     p.exercise_count >= r.required_exercise;
   
-    if (canLevelUp) {
-      await updateUserLevel(db, userId, nextLevel);
-    }
-  }
+  //   if (canLevelUp) {
+  //     await updateUserLevel(db, userId, nextLevel);
+  //   }
+  // }
   
   // ------------------------------------------------------------
   //  출석 처리

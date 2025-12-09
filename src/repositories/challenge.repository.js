@@ -181,50 +181,55 @@ export function getWeeklyPhotos(pool, userId, startDate) {
 
 //레벨업 확인
 export async function checkAndUpdateLevel(client, userId) {
-  // 1. 현재 사용자 레벨 가져오기
-  const userRes = await client.query(
-    `SELECT level FROM users WHERE id = $1`,
-    [userId]
-  );
-  if (!userRes.rows.length) return;
+  while (true) {
+    // 현재 사용자 레벨
+    const userRes = await client.query(
+      `SELECT level FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (!userRes.rows.length) return;
 
-  const currentLevel = userRes.rows[0].level;
+    const currentLevel = userRes.rows[0].level;
 
-  // 2. 현재 레벨의 요구치 가져오기
-  const reqRes = await client.query(
-    `SELECT required_attendance, required_photo, required_exercise
-     FROM challenge_level
-     WHERE level = $1`,
-    [currentLevel]
-  );
-  if (!reqRes.rows.length) return;
+    // 현재 레벨 요구치 확인
+    const reqRes = await client.query(
+      `SELECT required_attendance, required_photo, required_exercise
+       FROM challenge_level
+       WHERE level = $1`,
+      [currentLevel]
+    );
+    if (!reqRes.rows.length) return;
 
-  const req = reqRes.rows[0];
+    const req = reqRes.rows[0];
 
-  // 3. 현재 사용자의 챌린지 카운트 가져오기
-  const cntRes = await client.query(
-    `SELECT attendance_count, photo_count, exercise_count
-     FROM user_challenge_progress
-     WHERE user_id = $1`,
-    [userId]
-  );
-  if (!cntRes.rows.length) return;
+    // 현재 카운트 확인
+    const cntRes = await client.query(
+      `SELECT attendance_count, photo_count, exercise_count
+       FROM user_challenge_progress
+       WHERE user_id = $1`,
+      [userId]
+    );
+    if (!cntRes.rows.length) return;
 
-  const cnt = cntRes.rows[0];
+    const cnt = cntRes.rows[0];
 
-  // 4. 레벨업 조건 충족 확인
-  const meetAttendance = cnt.attendance_count >= req.required_attendance;
-  const meetPhoto = cnt.photo_count >= req.required_photo;
-  const meetExercise = cnt.exercise_count >= req.required_exercise;
+    // 요구치 충족 여부
+    const meetAttendance = cnt.attendance_count >= req.required_attendance;
+    const meetPhoto = cnt.photo_count >= req.required_photo;
+    const meetExercise = cnt.exercise_count >= req.required_exercise;
 
-  if (meetAttendance && meetPhoto && meetExercise) {
-    // 5. 레벨 증가
+    // 하나라도 부족하면 레벨업 종료
+    if (!meetAttendance || !meetPhoto || !meetExercise) break;
+
+    // 레벨업 수행
     await client.query(
       `UPDATE users SET level = level + 1 WHERE id = $1`,
       [userId]
     );
 
     console.log(`User ${userId} leveled up to level ${currentLevel + 1}`);
+
+    // while 반복해서 다음 레벨 요구치도 충족하는지 계속 검사
   }
 }
 
