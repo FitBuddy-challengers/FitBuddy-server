@@ -375,3 +375,5 @@ import {
   
     return { success: true, updatedCoin: newCoin };
   }
+
+  export { checkAndUpdateLevel };

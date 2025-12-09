@@ -14,7 +14,7 @@ import {
   getStoreItems,
   getUserOwnedItems,
   getStoreUserInfo,
-  purchaseItem
+  purchaseItem,
 } from "../services/challenge.service.js";
 
 const router = express.Router();
