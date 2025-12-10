@@ -38,6 +38,7 @@ FitBuddy-Server/
 └─ README.md
 
 
+
 ## 🏋️‍♂️ Core Features
 
 ### ✔ 1. 운동 플랜 생성 API
@@ -66,6 +67,7 @@ json
 운동 완료 여부 기록
 인증 사진 업로드 시 챌린지 포인트 증가
 챌린지 보상(레벨/코인) 지급 API 제공
+
 
 
 
