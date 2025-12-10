@@ -37,7 +37,7 @@ FitBuddy-Server/
 ├─ package.json
 └─ README.md
 
-
+---
 
 ## 🏋️‍♂️ Core Features
 
@@ -45,37 +45,30 @@ FitBuddy-Server/
 - OpenAI GPT 기반 맞춤 운동 루틴 자동 생성  
 - 생성된 운동은 `plans`, `schedules`, `reps_sets`, `time_sets` 테이블에 저장됨
 
+---
 
 ### ✔ 2. 오늘의 운동 조회 API
 
-json
+```json
 {
   "plan": { "id": 151, "date": "2025-12-10" },
   "schedules": [
     { "schedule_id": 336, "exercise_name": "덤벨 벤치 프레스" }
   ]
 }
+```
 
-### 3. 운동 진행 체크 API
+---
 
-반복 운동: /schedule/update/reps-set-completion
-시간 운동: /schedule/update/time-set-completion
+### ✔ 3. 운동 진행 체크 API
+반복 운동: `/schedule/update/reps-set-completion`  
+시간 운동: `/schedule/update/time-set-completion`  
 세트별 completion 저장 → 모든 세트 완료 시 운동 완료 처리
 
-###4. 챌린지 시스템
+---
 
-운동 완료 여부 기록
-인증 사진 업로드 시 챌린지 포인트 증가
-챌린지 보상(레벨/코인) 지급 API 제공
-
-
-
-
-
-
-
-
-
-
-
+### ✔ 4. 챌린지 시스템
+- 운동 완료 여부 기록  
+- 인증 사진 업로드 시 챌린지 포인트 증가  
+- 챌린지 보상(레벨/코인) 지급 API 제공
 
