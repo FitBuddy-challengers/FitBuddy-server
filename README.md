@@ -1,152 +1,77 @@
-✔ FitBuddy Server
+# 🏋️‍♂️ FitBuddy Server
 
-FitBuddy Server는 사용자의 운동 루틴 생성, 운동 기록 관리, 챌린지(출석·사진 인증), AI 운동 분석 및 조언, 상점 아이템 관리 등을 담당하는 백엔드 시스템입니다.
-Android 앱(FitBuddy-client)와 연동되어 전체 서비스의 핵심 로직을 제공합니다.
+FitBuddy는 사용자의 맞춤형 운동 루틴 생성, 운동 진행 체크, 인증 사진 업로드, 챌린지 진행률 계산 등을 제공하는 헬스 케어 플랫폼입니다.  
+본 서버는 FitBuddy **Android 앱과 통신**하며, 모든 운동·챌린지 로직을 처리합니다.
 
-🚀 Tech Stack
-분야	기술
-Language	Node.js (ES6)
-Framework	Express.js
-Database	PostgreSQL
-ORM / Query	pg (직접 SQL 작성)
-Auth	JWT 기반 로그인
-Image Storage	Cloudinary
-Infra	Render Web Service + Render PostgreSQL
-AI 기능	OpenAI GPT-4o-mini 기반 운동 분석
-📦 프로젝트 구조
-FitBuddy-server/
- ┣ 📁 controllers/     # 라우터에서 호출되는 비즈니스 로직
- ┣ 📁 routes/           # REST API 엔드포인트 정의
- ┣ 📁 middleware/       # 인증, 에러 핸들러 등
- ┣ 📁 utils/            # DB 연결, Cloudinary, Token util
- ┣ 📁 services/         # AI 분석 서비스 등
- ┣ app.js               # Express 엔트리 포인트
- ┣ package.json
- ┗ README.md
+---
 
-🔐 인증 · 회원 기능
-✔ 회원가입 / 로그인 / 인증 토큰 발급
+## 🧱 Tech Stack
 
-JWT 기반
+| 영역 | 기술 |
+|------|------|
+| Backend Framework | Node.js (Express) |
+| Database | PostgreSQL |
+| Deployment | Render |
+| File Upload | multer (local storage) – *추후 AWS S3 연동 가능* |
+| API Testing | Postman |
+| Auth / User Info | JWT 기반 로그인(선택), UserPreference 기반 캐싱 |
 
-비밀번호 해시는 bcrypt
+---
 
-로그인 성공 시 userId + token 반환
+## 📂 Project Structure
+FitBuddy-Server/
+├─ src/
+│ ├─ routes/
+│ │ ├─ auth.js
+│ │ ├─ plan.js
+│ │ ├─ schedule.js
+│ │ ├─ challenge.js
+│ │ └─ upload.js
+│ ├─ controllers/
+│ ├─ middleware/
+│ ├─ db/
+│ │ └─ index.js
+│ └─ app.js
+├─ uploads/
+├─ .env
+├─ package.json
+└─ README.md
 
-UserPreference를 통해 앱에서 토큰을 자동 저장
+## 🏋️‍♂️ Core Features
 
-🏋️ 운동 계획 (Workout Plan) API
-✔ 오늘의 운동 계획 조회
+### ✔ 1. 운동 플랜 생성 API
+- OpenAI GPT 기반 맞춤 운동 루틴 자동 생성  
+- 생성된 운동은 `plans`, `schedules`, `reps_sets`, `time_sets` 테이블에 저장됨
 
-앱 홈 화면에서 호출되는 핵심 API
-반복 운동(N회 × 세트)과 시간 운동(초 단위 × 세트)을 모두 지원
 
-✔ 세트 완료 여부 업데이트
+### ✔ 2. 오늘의 운동 조회 API
 
-사용자가 체크박스를 누르면 다음과 같은 API가 호출됨:
+json
+{
+  "plan": { "id": 151, "date": "2025-12-10" },
+  "schedules": [
+    { "schedule_id": 336, "exercise_name": "덤벨 벤치 프레스" }
+  ]
+}
 
-반복 운동: /sets/reps/update
+### 3. 운동 진행 체크 API
 
-시간 운동: /sets/time/update
+반복 운동: /schedule/update/reps-set-completion
+시간 운동: /schedule/update/time-set-completion
+세트별 completion 저장 → 모든 세트 완료 시 운동 완료 처리
 
-✔ 모든 세트가 완료되면 isCompleted = true
-✔ 이 값이 홈 화면 게이지(ProgressBar)에 반영됨
+###4. 챌린지 시스템
 
-🗓️ 챌린지 기능 (운동 인증 시스템)
-✔ 출석 체크(1일 1회)
+운동 완료 여부 기록
+인증 사진 업로드 시 챌린지 포인트 증가
+챌린지 보상(레벨/코인) 지급 API 제공
 
-markAttendance() 호출 시 DB에 기록
 
-앱에서는 SharedPreferences에 today 저장하여 중복 체크 방지
 
-✔ 주간 인증 사진 업로드
 
-Cloudinary에 이미지 저장
 
-DB에는 imageUrl + 날짜 저장
 
-Home / Challenge 탭 모두 실시간 반영
 
-🤖 AI 운동 분석 기능
 
-OpenAI GPT를 사용하여 아래 기능 제공:
 
-✔ 이번달 운동 분석 요약
-
-가장 많이 한 운동 부위
-
-가장 자주 수행한 운동
-
-“00님은 가슴/어깨 왕! 이번 달 OO를 가장 많이 했어요” 형태 메시지 반환
-
-✔ AI 운동 추천
-
-사용자의 최근 운동 패턴을 기반으로 부족한 근육군 추천
-길게 설명된 분석 레포트도 함께 제공
-
-🛒 상점(Shop) · 캐릭터 꾸미기
-✔ 착용 규칙 서버 반영
-
-코스튬 착용 시 상·하의/원피스 모두 해제
-
-원피스 착용 시 상·하의 해제
-
-안경/액세서리/헤어 악세사리는 독립 착용 가능
-
-✔ 구매 후 착용 자동 처리
-
-코인 차감
-
-착용 상태 업데이트
-
-클라이언트에서는 SharedPreferences로 저장
-
-📸 사진 업로드 후 자동 이동 처리
-
-사진 인증 성공 시 서버에서 정상 응답 →
-클라이언트가 ChallengeFragment로 자동 이동
-(바텀 네비 유지 → 운동 탭으로 이동 가능)
-
-🛠️ 환경변수 (.env 예시)
-DATABASE_URL=postgres://...
-JWT_SECRET=your-secret-key
-CLOUDINARY_CLOUD_NAME=...
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
-OPENAI_API_KEY=...
-
-▶️ 시작하기
-1) Install dependencies
-npm install
-
-2) Run server
-npm start
-
-3) Development
-npm run dev
-
-🧪 API 테스트
-
-Postman / Thunder Client Collection 제공 예정
-모든 API는 /api prefix 사용
-
-📌 현재 서버에서 제공하는 핵심 기능 요약
-
-회원가입 / 로그인
-
-오늘의 운동 계획 조회
-
-세트 완료 체크 (반복 / 시간)
-
-운동 진행률 계산
-
-AI 운동 분석
-
-주간 사진 인증
-
-출석 체크
-
-상점 아이템 조회, 구매, 착용
-
-캐릭터 꾸미기(악세사리·코스튬 레이어링 지원)
 
