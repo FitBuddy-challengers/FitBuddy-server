@@ -21,21 +21,22 @@ FitBuddy는 사용자의 맞춤형 운동 루틴 생성, 운동 진행 체크, �
 ## 📂 Project Structure
 FitBuddy-Server/
 ├─ src/
-│ ├─ routes/
-│ │ ├─ auth.js
-│ │ ├─ plan.js
-│ │ ├─ schedule.js
-│ │ ├─ challenge.js
-│ │ └─ upload.js
-│ ├─ controllers/
-│ ├─ middleware/
-│ ├─ db/
-│ │ └─ index.js
-│ └─ app.js
+│  ├─ routes/
+│  │  ├─ auth.js
+│  │  ├─ plan.js
+│  │  ├─ schedule.js
+│  │  ├─ challenge.js
+│  │  └─ upload.js
+│  ├─ controllers/
+│  ├─ middleware/
+│  ├─ db/
+│  │  └─ index.js
+│  └─ app.js
 ├─ uploads/
 ├─ .env
 ├─ package.json
 └─ README.md
+
 
 ## 🏋️‍♂️ Core Features
 
@@ -65,6 +66,7 @@ json
 운동 완료 여부 기록
 인증 사진 업로드 시 챌린지 포인트 증가
 챌린지 보상(레벨/코인) 지급 API 제공
+
 
 
 
